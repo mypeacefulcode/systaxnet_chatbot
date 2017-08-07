@@ -1,0 +1,8 @@
+
+*.swp
+*.pyc
+*.bak
+*.log
+
+venv/
+logs/

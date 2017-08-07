@@ -1,0 +1,1 @@
+SAMPLE_DIFFERENT_CONFIG = "production"

@@ -1,0 +1,15 @@
+zk_server_1 = "10.146.0.6"
+zk_server_2 = "10.146.0.4"
+zk_server_3 = "10.146.0.2"
+
+mongodb_conf = {
+    "hosts":"10.146.0.4",
+    "port":27017
+}
+
+rabbitmq_conf = {
+    "hosts":"10.146.0.6",
+    "port":5672,
+    "user":"guest",
+    "password":"wmind2017"
+}
