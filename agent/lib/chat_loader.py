@@ -38,7 +38,7 @@ class ChatLoader:
         cursor = self.mongodb.rocketchat_message.find({"$and":[{"ts":{"$gt":min_ts}},{"ts":{"$lte":max_ts}}]})
         messages = []
         for doc in cursor:
-            if not doc['u']['username'] in CHATBOT_USER:
+            if not doc['u']['_id'] in CHATBOT_USER:
                 messages.append(doc)
         cursor.close()
 

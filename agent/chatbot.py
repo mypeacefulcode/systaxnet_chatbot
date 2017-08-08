@@ -1,23 +1,54 @@
 #!/usr/bin/env python
 #-*- coding: utf-8 -*-
 
-import time, os, sys
+import time, os, sys, re
 import logging, getopt
 from logging.handlers import TimedRotatingFileHandler
 import traceback, kazoo, pika
 from tendo import singleton
 from config.base import *
-from lib.chat_loader import ChatLoader
+from lib.rocket_chat import RocketChat 
 from kazoo.client import KazooClient
 from pymongo import MongoClient
+from rivescript import RiveScript
+import json
 
-def blocking_connection():
+class PublishingMessage(object):
+    def __init__(self, zk, rs, rc, mongodb):
+        self.zk = zk
+        self.mongodb = mongodb
+        self.rs = rs
+        self.rc = rc
+
+    def callback(self, ch, method, properties, body):
+        doc = json.loads(body)
+        print(doc)
+        rc_channel = doc['rid']
+
+        reply = self.make_reply(doc['msg'])
+        print(reply)
+
+        self.rc.send_message(rc_channel, reply)
+
+        ch.basic_ack(delivery_tag = method.delivery_tag)
+
+    def make_reply(self, message):
+        reply = self.rs.reply("localuser", message)
+
+        return reply
+
+def blocking_connection(publisher):
     credentials = pika.PlainCredentials(rabbitmq_conf['user'],rabbitmq_conf['password'])
-    rb_conn = pika.BlockingConnection(pika.ConnectionParameters(host=rabbitmq_conf['hosts'], credentials=credentials))
-    rb_channel = rb_conn.channel()
-    rb_channel.queue_declare(queue='chat_queue', durable=True)
 
-    return rb_channel
+    connection = pika.BlockingConnection(pika.ConnectionParameters(host=rabbitmq_conf['hosts'], credentials=credentials))
+    channel = connection.channel()
+
+    channel.queue_declare(queue='chat_queue', durable=True)
+
+    channel.basic_qos(prefetch_count=1)
+    channel.basic_consume(publisher.callback, queue='chat_queue')
+
+    channel.start_consuming()
 
 def main():
     logger.info("Program started!")
@@ -30,27 +61,23 @@ def main():
     mongodb_conn = MongoClient(mongodb_conf['hosts'],mongodb_conf['port'])
     mongodb = mongodb_conn.rocketchat
 
+    # Rivescript
+    rs = RiveScript(utf8=True)
+    rs.load_directory("./rule")
+    rs.sort_replies()
+
+    # Rocket.chat
+    rc = RocketChat(RC_CONF, logger)
+
+    publisher = PublishingMessage(zk, rs, rc, mongodb)
+    
     # RabbitMQ
-    rb_channel = blocking_connection()
-
-    cl = ChatLoader(zk, mongodb, rb_channel)
-
     while True:
-        position = cl.load_position()
-        print("Position is: %s" % position)
-
-        messages, max_ts = cl.load_data(position)
-
-        print("Get data: %s" % messages)
-        try:
-            cl.put_data(messages)
+        try: 
+            logger.info("[*] Waiting for messages")
+            blocking_connection(publisher)
         except:
-            rb_channel = blocking_connection()
-            cl = ChatLoader(zk, mongodb, rb_channel)
-            cl.put_data(messages)
-
-        cl.set_position(max_ts)
-        time.sleep(1)
+            traceback.print_exc()
 
 if __name__ == "__main__":
 
