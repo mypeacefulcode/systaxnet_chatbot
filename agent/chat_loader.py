@@ -36,20 +36,22 @@ def main():
     cl = ChatLoader(zk, mongodb, rb_channel)
 
     while True:
-        position = cl.load_position()
-        print("Position is: %s" % position)
+        lock = zk.Lock(ZOOKEEPER_LOCK_PATH, os.getpid())
+        with lock:
+            position = cl.load_position()
+            print("Position is: %s" % position)
 
-        messages, max_ts = cl.load_data(position)
+            messages, max_ts = cl.load_data(position)
 
-        print("Get data: %s" % messages)
-        try:
-            cl.put_data(messages)
-        except:
-            rb_channel = blocking_connection()
-            cl = ChatLoader(zk, mongodb, rb_channel)
-            cl.put_data(messages)
+            print("Get data: %s" % messages)
+            try:
+                cl.put_data(messages)
+            except:
+                rb_channel = blocking_connection()
+                cl = ChatLoader(zk, mongodb, rb_channel)
+                cl.put_data(messages)
 
-        cl.set_position(max_ts)
+            cl.set_position(max_ts)
         time.sleep(1)
 
 if __name__ == "__main__":

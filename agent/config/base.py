@@ -1,4 +1,5 @@
 ZOOKEEPER_CONFIG_PATH = "/chatbot-config"
+ZOOKEEPER_LOCK_PATH = ZOOKEEPER_CONFIG_PATH + "/lock"
 ZOOKEEPER_SAVED_POSITION = "db-position"
 
 # ['chatbot']
