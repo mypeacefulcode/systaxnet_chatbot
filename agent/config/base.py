@@ -1,5 +1,6 @@
 ZOOKEEPER_CONFIG_PATH = "/chatbot-config"
 ZOOKEEPER_LOCK_PATH = ZOOKEEPER_CONFIG_PATH + "/lock"
+ZOOKEEPER_USER_LOCK_PATH = ZOOKEEPER_CONFIG_PATH + "/user-lock"
 ZOOKEEPER_SAVED_POSITION = "db-position"
 
 # ['chatbot']
@@ -10,3 +11,6 @@ RC_CONF = {
     'username':'chatbot',
     'password':'wmind2017'
 }
+
+# Message
+MSG_PROCESSING_ALREADY = "processing already"

@@ -3,6 +3,7 @@
 *.pyc
 *.bak
 *.log
+nohup.out
 
 venv/
 logs/

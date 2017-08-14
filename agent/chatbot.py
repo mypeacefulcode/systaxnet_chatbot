@@ -21,21 +21,44 @@ class PublishingMessage(object):
         self.rc = rc
 
     def callback(self, ch, method, properties, body):
-        doc = json.loads(body)
+        doc = json.loads(body.decode('utf-8'))
         print(doc)
         rc_channel = doc['rid']
+        _uid = doc['u']['_id']
 
-        reply = self.make_reply(doc['msg'])
+        reply = self.make_reply(doc['msg'], _uid)
         print(reply)
 
         self.rc.send_message(rc_channel, reply)
 
         ch.basic_ack(delivery_tag = method.delivery_tag)
 
-    def make_reply(self, message):
-        reply = self.rs.reply("localuser", message)
+    def make_reply(self, message, _uid):
+
+        lock = self.get_lock(_uid)
+        if lock.is_acquired:
+            reply = self.rs.reply("localuser", message)
+        else:
+            reply = self.rs.reply("localuser", MSG_PROCESSING_ALREADY)
+        self.release_lock(lock)
 
         return reply
+
+    def get_lock(self, _uid):
+        test = self.zk.ensure_path(ZOOKEEPER_USER_LOCK_PATH + "/" +  _uid)
+        lock = self.zk.Lock(ZOOKEEPER_USER_LOCK_PATH + "/" +  _uid, os.getpid())
+
+        try:
+            lock.acquire(timeout=0.5)
+        except kazoo.exceptions.LockTimeout:
+            logger.error(traceback.print_exc())
+
+        return lock
+
+    def release_lock(self, lock):
+        lock.release()
+
+        return True
 
 def blocking_connection(publisher):
     credentials = pika.PlainCredentials(rabbitmq_conf['user'],rabbitmq_conf['password'])
@@ -72,12 +95,12 @@ def main():
     publisher = PublishingMessage(zk, rs, rc, mongodb)
     
     # RabbitMQ
-    while True:
-        try: 
-            logger.info("[*] Waiting for messages")
-            blocking_connection(publisher)
-        except:
-            traceback.print_exc()
+    #while True:
+    try: 
+        logger.info("[*] Waiting for messages")
+        blocking_connection(publisher)
+    except:
+        logger.error(traceback.print_exc())
 
 if __name__ == "__main__":
 
