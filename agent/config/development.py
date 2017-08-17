@@ -13,3 +13,8 @@ rabbitmq_conf = {
     "user":"guest",
     "password":"wmind2017"
 }
+
+redis_conf = {
+    "hosts":"10.146.0.3",
+    "port":6379
+}

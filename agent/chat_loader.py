@@ -52,6 +52,7 @@ def main():
                 cl.put_data(messages)
 
             cl.set_position(max_ts)
+            sys.stdout.flush()
         time.sleep(1)
 
 if __name__ == "__main__":

@@ -2,7 +2,7 @@
 #-*- coding: utf-8 -*-
 
 import time, os, sys, re
-import logging, getopt
+import logging, getopt, uuid
 from logging.handlers import TimedRotatingFileHandler
 import traceback, kazoo, pika
 from tendo import singleton
@@ -13,6 +13,100 @@ from pymongo import MongoClient
 from rivescript import RiveScript
 import json
 
+class Syntaxnet(object):
+    def __init__(self, rabbitmq_conf):
+        self.rabbitmq_conf = rabbitmq_conf
+        self.connect()
+
+    def connect(self):
+        credentials = pika.PlainCredentials(self.rabbitmq_conf['user'],self.rabbitmq_conf['password'])
+
+        self.connection = pika.BlockingConnection(pika.ConnectionParameters(host=self.rabbitmq_conf['hosts'], credentials=credentials))
+
+        self.channel = self.connection.channel()
+
+        result = self.channel.queue_declare(exclusive=True)
+        self.callback_queue = result.method.queue
+
+        self.channel.basic_consume(self.on_response, no_ack=True, queue=self.callback_queue)
+
+    def on_response(self, ch, method, props, body):
+        if self.corr_id == props.correlation_id:
+            self.response = body
+
+    def call(self, text):
+        self.response = None
+        self.corr_id = str(uuid.uuid4())
+
+        try:
+            self.channel.basic_publish(exchange='',
+                                       routing_key='syntax_queue',
+                                       properties=pika.BasicProperties(
+                                             reply_to = self.callback_queue,
+                                             correlation_id = self.corr_id,
+                                             ),
+                                       body=text)
+        except:
+            self.connect()
+            self.channel.basic_publish(exchange='',
+                                       routing_key='syntax_queue',
+                                       properties=pika.BasicProperties(
+                                             reply_to = self.callback_queue,
+                                             correlation_id = self.corr_id,
+                                             ),
+                                       body=text)
+
+        while self.response is None:
+            self.connection.process_data_events()
+        return self.response
+
+class AnalyzeText(object):
+    def __init__(self, rabbitmq_conf):
+        self.rabbitmq_conf = rabbitmq_conf
+        self.connect()
+
+    def connect(self):
+        credentials = pika.PlainCredentials(self.rabbitmq_conf['user'],self.rabbitmq_conf['password'])
+
+        self.connection = pika.BlockingConnection(pika.ConnectionParameters(host=self.rabbitmq_conf['hosts'], credentials=credentials))
+
+        self.channel = self.connection.channel()
+
+        result = self.channel.queue_declare(exclusive=True)
+        self.callback_queue = result.method.queue
+
+        self.channel.basic_consume(self.on_response, no_ack=True, queue=self.callback_queue)
+
+    def on_response(self, ch, method, props, body):
+        if self.corr_id == props.correlation_id:
+            self.response = body
+
+    def call(self, text):
+        self.response = None
+        self.corr_id = str(uuid.uuid4())
+
+        try:
+            self.channel.basic_publish(exchange='',
+                                       routing_key='morph_queue',
+                                       properties=pika.BasicProperties(
+                                             reply_to = self.callback_queue,
+                                             correlation_id = self.corr_id,
+                                             ),
+                                       body=text)
+        except:
+            self.connect()
+            self.channel.basic_publish(exchange='',
+                                       routing_key='morph_queue',
+                                       properties=pika.BasicProperties(
+                                             reply_to = self.callback_queue,
+                                             correlation_id = self.corr_id,
+                                             ),
+                                       body=text)
+
+        while self.response is None:
+            self.connection.process_data_events()
+        return self.response
+
 class PublishingMessage(object):
     def __init__(self, zk, rs, rc, mongodb):
         self.zk = zk
@@ -20,18 +114,27 @@ class PublishingMessage(object):
         self.rs = rs
         self.rc = rc
 
-    def callback(self, ch, method, properties, body):
+    def callback(self, ch, method, properties, body, analyzer, syntaxnet):
         doc = json.loads(body.decode('utf-8'))
         print(doc)
         rc_channel = doc['rid']
         _uid = doc['u']['_id']
 
-        reply = self.make_reply(doc['msg'], _uid)
+        response = analyzer.call(doc['msg']).decode('utf-8').split(":@")
+        print(response)
+        formatter = response[0]
+        morph_str = response[1].replace('|','\n')
+        print(formatter)
+
+        reply = self.make_reply(formatter, _uid)
         print(reply)
 
-        self.rc.send_message(rc_channel, reply)
+        response = syntaxnet.call(formatter)
 
-        ch.basic_ack(delivery_tag = method.delivery_tag)
+        reply = morph_str + "\n" + reply + "\n" + response.decode('utf-8')
+        print("reply", reply)
+        self.rc.send_message(rc_channel, reply)
+        sys.stdout.flush()
 
     def make_reply(self, message, _uid):
 
@@ -52,6 +155,7 @@ class PublishingMessage(object):
             lock.acquire(timeout=0.5)
         except kazoo.exceptions.LockTimeout:
             logger.error(traceback.print_exc())
+            sys.stdout.flush()
 
         return lock
 
@@ -68,8 +172,12 @@ def blocking_connection(publisher):
 
     channel.queue_declare(queue='chat_queue', durable=True)
 
+    analyzer = AnalyzeText(rabbitmq_conf)
+    syntaxnet = Syntaxnet(rabbitmq_conf)
+
     channel.basic_qos(prefetch_count=1)
-    channel.basic_consume(publisher.callback, queue='chat_queue')
+    channel.basic_consume(lambda ch, method, properties, body:
+            publisher.callback(ch, method, properties, body, analyzer, syntaxnet), queue='chat_queue', no_ack=True)
 
     channel.start_consuming()
 
@@ -93,14 +201,15 @@ def main():
     rc = RocketChat(RC_CONF, logger)
 
     publisher = PublishingMessage(zk, rs, rc, mongodb)
-    
+
     # RabbitMQ
-    #while True:
-    try: 
-        logger.info("[*] Waiting for messages")
-        blocking_connection(publisher)
-    except:
-        logger.error(traceback.print_exc())
+    while True:
+        try: 
+            logger.info("[*] Waiting for messages")
+            blocking_connection(publisher)
+        except:
+            logger.error(traceback.print_exc())
+            sys.stdout.flush()
 
 if __name__ == "__main__":
 
