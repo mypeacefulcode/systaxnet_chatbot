@@ -116,23 +116,25 @@ class PublishingMessage(object):
 
     def callback(self, ch, method, properties, body, analyzer, syntaxnet):
         doc = json.loads(body.decode('utf-8'))
-        print(doc)
         rc_channel = doc['rid']
         _uid = doc['u']['_id']
 
         response = analyzer.call(doc['msg']).decode('utf-8').split(":@")
-        print(response)
         formatter = response[0]
         morph_str = response[1].replace('|','\n')
-        print(formatter)
 
         reply = self.make_reply(formatter, _uid)
-        print(reply)
 
+        print("formatter:",formatter)
         response = syntaxnet.call(formatter)
 
-        reply = morph_str + "\n" + reply + "\n" + response.decode('utf-8')
-        print("reply", reply)
+        reply = formatter + "\n" + morph_str + "\n" +  response.decode('utf-8') + "\n" + "------ reply -------\n" + reply
+
+        print("origin:",doc['msg'])
+        response = syntaxnet.call(doc['msg'])
+
+        reply = reply + "\n" + response.decode('utf-8')
+
         self.rc.send_message(rc_channel, reply)
         sys.stdout.flush()
 
