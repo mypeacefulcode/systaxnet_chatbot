@@ -17,28 +17,37 @@ import googleapiclient.discovery
 
 class Syntaxnet(object):
     def __init__(self):
-        def get_native_encoding_type():
-            """Returns the encoding type that matches Python's native strings."""
-            if sys.maxunicode == 65535:
-                self.encoding = 'UTF16'
-            else:
-                self.encoding = 'UTF32'
+        """Returns the encoding type that matches Python's native strings."""
+        if sys.maxunicode == 65535:
+            self.encoding = 'UTF16'
+        else:
+            self.encoding = 'UTF32'
 
-            self.service = googleapiclient.discovery.build('language', 'v1')
+        self.service = googleapiclient.discovery.build('language', 'v1')
 
-        def analyze_syntax(self, text):
-            body = {
-                'document': {
-                    'type': 'PLAIN_TEXT',
-                    'content': text,
-                },
-                'encoding_type': self.encoding
-            }
+    def analyze_syntax(self, text):
+        body = {
+            'document': {
+                'type': 'PLAIN_TEXT',
+                'content': text,
+            },
+            'encoding_type': self.encoding
+        }
 
-            request = self.service.documents().analyzeSyntax(body=body)
-            response = request.execute()
+        request = self.service.documents().analyzeSyntax(body=body)
+        response = request.execute()
 
-            return response
+        return response
+
+    def token_to_string(self, response):
+        result = ''
+        idx = 0
+        for token in response['tokens']:
+            result += '[{}] {}: {}: {} ({})\n'.format(idx, token['partOfSpeech']['tag'], token['text']['content'],
+                                               token['dependencyEdge']['headTokenIndex'], token['dependencyEdge']['label'])
+            idx += 1
+
+        return result
 
 class AnalyzeText(object):
     def __init__(self, rabbitmq_conf):
@@ -105,14 +114,16 @@ class PublishingMessage(object):
 
         reply = self.make_reply(formatter, _uid)
 
-        response = syntaxnet.call(doc['msg'].decode('utf-8'))
+        response = syntaxnet.analyze_syntax(doc['msg'])
+        result = syntaxnet.token_to_string(response)
 
-        reply = formatter + "\n" + morph_str + "\n" +  response.decode('utf-8') + "\n" + "------ reply -------\n" + reply
-
-        print("origin:",doc['msg'])
-        response = syntaxnet.call(doc['msg'])
-
-        reply = reply + "\n" + response.decode('utf-8')
+        reply = formatter + "\n" + \
+                "------ morph string -------\n" + \
+                morph_str + "\n" +  \
+                "------ parse tree -------\n" + \
+                result + "\n" + \
+                "------ reply -------\n" + \
+                reply
 
         self.rc.send_message(rc_channel, reply)
         sys.stdout.flush()
@@ -154,7 +165,7 @@ def blocking_connection(publisher):
     channel.queue_declare(queue='chat_queue', durable=True)
 
     analyzer = AnalyzeText(rabbitmq_conf)
-    syntaxnet = Syntaxnet(rabbitmq_conf)
+    syntaxnet = Syntaxnet()
 
     channel.basic_qos(prefetch_count=1)
     channel.basic_consume(lambda ch, method, properties, body:
