@@ -13,32 +13,52 @@ from pymongo import MongoClient
 from rivescript import RiveScript
 import json
 
-import googleapiclient.discovery
-
 class Syntaxnet(object):
-    def __init__(self):
-        def get_native_encoding_type():
-            """Returns the encoding type that matches Python's native strings."""
-            if sys.maxunicode == 65535:
-                self.encoding = 'UTF16'
-            else:
-                self.encoding = 'UTF32'
+    def __init__(self, rabbitmq_conf):
+        self.rabbitmq_conf = rabbitmq_conf
+        self.connect()
 
-            self.service = googleapiclient.discovery.build('language', 'v1')
+    def connect(self):
+        credentials = pika.PlainCredentials(self.rabbitmq_conf['user'],self.rabbitmq_conf['password'])
 
-        def analyze_syntax(self, text):
-            body = {
-                'document': {
-                    'type': 'PLAIN_TEXT',
-                    'content': text,
-                },
-                'encoding_type': self.encoding
-            }
+        self.connection = pika.BlockingConnection(pika.ConnectionParameters(host=self.rabbitmq_conf['hosts'], credentials=credentials))
 
-            request = self.service.documents().analyzeSyntax(body=body)
-            response = request.execute()
+        self.channel = self.connection.channel()
 
-            return response
+        result = self.channel.queue_declare(exclusive=True)
+        self.callback_queue = result.method.queue
+
+        self.channel.basic_consume(self.on_response, no_ack=True, queue=self.callback_queue)
+
+    def on_response(self, ch, method, props, body):
+        if self.corr_id == props.correlation_id:
+            self.response = body
+
+    def call(self, text):
+        self.response = None
+        self.corr_id = str(uuid.uuid4())
+
+        try:
+            self.channel.basic_publish(exchange='',
+                                       routing_key='syntax_queue',
+                                       properties=pika.BasicProperties(
+                                             reply_to = self.callback_queue,
+                                             correlation_id = self.corr_id,
+                                             ),
+                                       body=text)
+        except:
+            self.connect()
+            self.channel.basic_publish(exchange='',
+                                       routing_key='syntax_queue',
+                                       properties=pika.BasicProperties(
+                                             reply_to = self.callback_queue,
+                                             correlation_id = self.corr_id,
+                                             ),
+                                       body=text)
+
+        while self.response is None:
+            self.connection.process_data_events()
+        return self.response
 
 class AnalyzeText(object):
     def __init__(self, rabbitmq_conf):
@@ -105,7 +125,8 @@ class PublishingMessage(object):
 
         reply = self.make_reply(formatter, _uid)
 
-        response = syntaxnet.call(doc['msg'].decode('utf-8'))
+        print("formatter:",formatter)
+        response = syntaxnet.call(formatter)
 
         reply = formatter + "\n" + morph_str + "\n" +  response.decode('utf-8') + "\n" + "------ reply -------\n" + reply
 
