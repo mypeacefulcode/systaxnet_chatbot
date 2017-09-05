@@ -1,0 +1,4 @@
+entity,actions,attributes,sentiment,means
+주문,하다,unreal,pos,order
+취소,하다,unreal,neg,cancel
+생각,"하다,나다",unreal,nat,wait
