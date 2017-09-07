@@ -8,100 +8,22 @@ import traceback, kazoo, pika
 from tendo import singleton
 from config.base import *
 from lib.rocket_chat import RocketChat 
+from lib.syntaxnet import Syntaxnet
+from lib.analyze_text import AnalyzeText
+from lib.execution_structure import ExecutionStructure
 from kazoo.client import KazooClient
 from pymongo import MongoClient
 from rivescript import RiveScript
 import json
 
-import googleapiclient.discovery
-
-class Syntaxnet(object):
-    def __init__(self):
-        """Returns the encoding type that matches Python's native strings."""
-        if sys.maxunicode == 65535:
-            self.encoding = 'UTF16'
-        else:
-            self.encoding = 'UTF32'
-
-        self.service = googleapiclient.discovery.build('language', 'v1')
-
-    def analyze_syntax(self, text):
-        body = {
-            'document': {
-                'type': 'PLAIN_TEXT',
-                'content': text,
-            },
-            'encoding_type': self.encoding
-        }
-
-        request = self.service.documents().analyzeSyntax(body=body)
-        response = request.execute()
-
-        return response
-
-    def token_to_string(self, response):
-        result = ''
-        idx = 0
-        for token in response['tokens']:
-            result += '[{}] {}: {}: {} ({})\n'.format(idx, token['partOfSpeech']['tag'], token['text']['content'],
-                                               token['dependencyEdge']['headTokenIndex'], token['dependencyEdge']['label'])
-            idx += 1
-
-        return result
-
-class AnalyzeText(object):
-    def __init__(self, rabbitmq_conf):
-        self.rabbitmq_conf = rabbitmq_conf
-        self.connect()
-
-    def connect(self):
-        credentials = pika.PlainCredentials(self.rabbitmq_conf['user'],self.rabbitmq_conf['password'])
-
-        self.connection = pika.BlockingConnection(pika.ConnectionParameters(host=self.rabbitmq_conf['hosts'], credentials=credentials))
-
-        self.channel = self.connection.channel()
-
-        result = self.channel.queue_declare(exclusive=True)
-        self.callback_queue = result.method.queue
-
-        self.channel.basic_consume(self.on_response, no_ack=True, queue=self.callback_queue)
-
-    def on_response(self, ch, method, props, body):
-        if self.corr_id == props.correlation_id:
-            self.response = body
-
-    def call(self, text):
-        self.response = None
-        self.corr_id = str(uuid.uuid4())
-
-        try:
-            self.channel.basic_publish(exchange='',
-                                       routing_key='morph_queue',
-                                       properties=pika.BasicProperties(
-                                             reply_to = self.callback_queue,
-                                             correlation_id = self.corr_id,
-                                             ),
-                                       body=text)
-        except:
-            self.connect()
-            self.channel.basic_publish(exchange='',
-                                       routing_key='morph_queue',
-                                       properties=pika.BasicProperties(
-                                             reply_to = self.callback_queue,
-                                             correlation_id = self.corr_id,
-                                             ),
-                                       body=text)
-
-        while self.response is None:
-            self.connection.process_data_events()
-        return self.response
-
 class PublishingMessage(object):
-    def __init__(self, zk, rs, rc, mongodb):
+    def __init__(self, zk, rs, rc, es, mongodb, logger):
         self.zk = zk
         self.mongodb = mongodb
         self.rs = rs
         self.rc = rc
+        self.es = es
+        self.logger = logger
 
     def callback(self, ch, method, properties, body, analyzer, syntaxnet):
         doc = json.loads(body.decode('utf-8'))
@@ -115,15 +37,22 @@ class PublishingMessage(object):
         reply = self.make_reply(formatter, _uid)
 
         response = syntaxnet.analyze_syntax(doc['msg'])
-        result = syntaxnet.token_to_string(response)
+        if not 'error' in response.keys():
+            result = syntaxnet.token_to_string(response)
+            df = syntaxnet.token_to_dataframe(response)
 
-        reply = formatter + "\n" + \
-                "------ morph string -------\n" + \
-                morph_str + "\n" +  \
-                "------ parse tree -------\n" + \
-                result + "\n" + \
-                "------ reply -------\n" + \
-                reply
+            es_response = self.es.read_parse_tree(df)
+
+            reply = formatter + "\n" + \
+                    "------ morph string -------\n" + \
+                    morph_str + "\n" +  \
+                    "------ parse tree -------\n" + \
+                    result + "\n" + \
+                    "------ reply -------\n" + \
+                    reply
+        else:
+            self.logger.error(response['error'])
+            reply = SYSTEM_ERROR_MESSAGE
 
         self.rc.send_message(rc_channel, reply)
         sys.stdout.flush()
@@ -164,8 +93,8 @@ def blocking_connection(publisher):
 
     channel.queue_declare(queue='chat_queue', durable=True)
 
-    analyzer = AnalyzeText(rabbitmq_conf)
-    syntaxnet = Syntaxnet()
+    analyzer = AnalyzeText(rabbitmq_conf, 'morph_queue')
+    syntaxnet = Syntaxnet(logger)
 
     channel.basic_qos(prefetch_count=1)
     channel.basic_consume(lambda ch, method, properties, body:
@@ -192,16 +121,19 @@ def main():
     # Rocket.chat
     rc = RocketChat(RC_CONF, logger)
 
-    publisher = PublishingMessage(zk, rs, rc, mongodb)
+    # Execution structure
+    es = ExecutionStructure(ES_CONFIG, logger)
+
+    publisher = PublishingMessage(zk, rs, rc, es, mongodb, logger)
 
     # RabbitMQ
-    while True:
-        try: 
-            logger.info("[*] Waiting for messages")
-            blocking_connection(publisher)
-        except:
-            logger.error(traceback.print_exc())
-            sys.stdout.flush()
+    #while True:
+    try: 
+        logger.info("[*] Waiting for messages")
+        blocking_connection(publisher)
+    except:
+        logger.error(traceback.print_exc())
+        sys.stdout.flush()
 
 if __name__ == "__main__":
 
