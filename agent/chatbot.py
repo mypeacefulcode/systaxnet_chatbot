@@ -24,17 +24,14 @@ class PublishingMessage(object):
         self.rc = rc
         self.es = es
         self.logger = logger
+        self.kinds = ['when','what','how','why']
+        self.regex = re.compile(r"(^\||\|$)")
 
     def callback(self, ch, method, properties, body, analyzer, syntaxnet):
         doc = json.loads(body.decode('utf-8'))
         rc_channel = doc['rid']
         _uid = doc['u']['_id']
 
-        response = analyzer.call(doc['msg']).decode('utf-8').split(":@")
-        formatter = response[0]
-        morph_str = response[1].replace('|','\n')
-
-        reply = self.make_reply(formatter, _uid)
 
         response = syntaxnet.analyze_syntax(doc['msg'])
         if not 'error' in response.keys():
@@ -42,12 +39,32 @@ class PublishingMessage(object):
             df = syntaxnet.token_to_dataframe(response)
 
             es_response = self.es.read_parse_tree(df)
+            print(es_response)
 
-            reply = formatter + "\n" + \
-                    "------ morph string -------\n" + \
-                    morph_str + "\n" +  \
-                    "------ parse tree -------\n" + \
+            corpus = []
+            for kind in self.kinds:
+                words = es_response[kind]['words'] if es_response[kind]['words'] != None else ''
+                corpus.append(words)
+
+            response = analyzer.call(' -+- '.join(corpus)).decode('utf-8').split(":@")
+
+            idx = 0
+            for morphs in response[1].split("-+-/None/Punctuation"):
+                morph_str = self.regex.sub('',morphs)
+                es_response[self.kinds[idx]]['morphs']  = morph_str
+                idx += 1
+
+            print(es_response)
+            self.es.read_intent(es_response)
+
+            formatter = response[0]
+            reply = self.make_reply(formatter, _uid)
+
+
+            reply = "------ parse tree -------\n" + \
                     result + "\n" + \
+                    "------ branchs -------\n" + \
+                    str(es_response) + "\n" + \
                     "------ reply -------\n" + \
                     reply
         else:

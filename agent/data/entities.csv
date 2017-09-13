@@ -1,4 +1,6 @@
 entity,actions,attributes,sentiment,means
-주문,하다,unreal,pos,order
-취소,하다,unreal,neg,cancel
-생각,"하다,나다",unreal,nat,wait
+생각/Noun,"하다,나다",unreal,nat,wait
+주문/Noun,하다,unreal,pos,order
+취소/Noun,하다,unreal,neg,cancel
+환불/Noun,하다,unreal,neg,refund
+물건/Noun,"받다",real,nat,thing
