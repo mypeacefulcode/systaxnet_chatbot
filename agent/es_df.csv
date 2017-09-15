@@ -1,0 +1,3 @@
+kind,obj_entities,mind_entities,obj_means,mind_means,action,branch,morphs,origin
+what,"['주문/Noun', '취소/Noun']",[],"['order', 'cancel']",[],[],"[0, 1]","['주문/Noun', '취소/Noun']", 주문 취소
+how,['취소/Noun'],[],['cancel'],[],['하다'],"[2, 3, 4]","['취소/Noun', '하다/Verb', '께/Josa']", 취소할 께

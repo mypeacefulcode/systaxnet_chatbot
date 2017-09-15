@@ -1,0 +1,7 @@
+! version = 0.1
+
+// Bot variables
+!var name = chatbot
+
++ refund begin
+- 환불 하시겠습니까?

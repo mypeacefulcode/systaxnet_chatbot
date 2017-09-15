@@ -15,11 +15,13 @@ from kazoo.client import KazooClient
 from pymongo import MongoClient
 from rivescript import RiveScript
 import json
+import redis
 
 class PublishingMessage(object):
-    def __init__(self, zk, rs, rc, es, mongodb, logger):
+    def __init__(self, zk, rs, rc, es, mongodb, redisdb, logger):
         self.zk = zk
         self.mongodb = mongodb
+        self.redisdb = redisdb 
         self.rs = rs
         self.rc = rc
         self.es = es
@@ -29,60 +31,54 @@ class PublishingMessage(object):
 
     def callback(self, ch, method, properties, body, analyzer, syntaxnet):
         doc = json.loads(body.decode('utf-8'))
+        print(doc)
         rc_channel = doc['rid']
         _uid = doc['u']['_id']
 
-
-        response = syntaxnet.analyze_syntax(doc['msg'])
-        if not 'error' in response.keys():
-            result = syntaxnet.token_to_string(response)
-            df = syntaxnet.token_to_dataframe(response)
-
-            es_response = self.es.read_parse_tree(df)
-            print(es_response)
-
-            corpus = []
-            for kind in self.kinds:
-                words = es_response[kind]['words'] if es_response[kind]['words'] != None else ''
-                corpus.append(words)
-
-            response = analyzer.call(' -+- '.join(corpus)).decode('utf-8').split(":@")
-
-            idx = 0
-            for morphs in response[1].split("-+-/None/Punctuation"):
-                morph_str = self.regex.sub('',morphs)
-                es_response[self.kinds[idx]]['morphs']  = morph_str
-                idx += 1
-
-            print(es_response)
-            self.es.read_intent(es_response)
-
-            formatter = response[0]
-            reply = self.make_reply(formatter, _uid)
-
-
-            reply = "------ parse tree -------\n" + \
-                    result + "\n" + \
-                    "------ branchs -------\n" + \
-                    str(es_response) + "\n" + \
-                    "------ reply -------\n" + \
-                    reply
+        lock = self.get_lock(_uid)
+        if not lock.is_acquired:
+            reply = self.rs.reply("localuser", MSG_PROCESSING_ALREADY)
         else:
-            self.logger.error(response['error'])
-            reply = SYSTEM_ERROR_MESSAGE
+            response = syntaxnet.analyze_syntax(doc['msg'])
+            if not 'error' in response.keys():
+                result = syntaxnet.token_to_string(response)
+                df = syntaxnet.token_to_dataframe(response)
 
-        self.rc.send_message(rc_channel, reply)
+                es_response = self.es.read_parse_tree(df)
+                print(es_response)
+
+                corpus = []
+                for kind in self.kinds:
+                    words = es_response[kind]['words'] if es_response[kind]['words'] != None else ''
+                    corpus.append(words)
+
+                response = analyzer.call(' -+- '.join(corpus)).decode('utf-8').split(":@")
+
+                idx = 0
+                for morphs in response[1].split("-+-/None/Punctuation"):
+                    morph_str = self.regex.sub('',morphs)
+                    es_response[self.kinds[idx]]['morphs']  = morph_str
+                    idx += 1
+
+                print(es_response)
+                context, sub_context, response  = self.es.read_intent(es_response, _uid)
+                check_dict = self.es.check_domain(context, sub_context, _uid)
+                formatter = self.es.make_formatter(context, sub_context, response, check_dict)
+
+                self.es.set_user_context(_uid, context, sub_context, response, formatter)
+
+                reply = self.make_reply(formatter)
+            else:
+                self.logger.error(response['error'])
+                reply = SYSTEM_ERROR_MESSAGE
+
+            self.rc.send_message(rc_channel, reply)
+
+        self.release_lock(lock)
         sys.stdout.flush()
 
-    def make_reply(self, message, _uid):
-
-        lock = self.get_lock(_uid)
-        if lock.is_acquired:
-            reply = self.rs.reply("localuser", message)
-        else:
-            reply = self.rs.reply("localuser", MSG_PROCESSING_ALREADY)
-        self.release_lock(lock)
-
+    def make_reply(self, message):
+        reply = self.rs.reply("localuser", message)
         return reply
 
     def get_lock(self, _uid):
@@ -130,6 +126,10 @@ def main():
     mongodb_conn = MongoClient(mongodb_conf['hosts'],mongodb_conf['port'])
     mongodb = mongodb_conn.rocketchat
 
+    # Redis
+    #redisdb = redis.Redis(redis_conf['hosts'])
+    redisdb = redis.StrictRedis(host=redis_conf['hosts'], charset="utf-8", decode_responses=True)
+
     # Rivescript
     rs = RiveScript(utf8=True)
     rs.load_directory("./rule")
@@ -139,9 +139,9 @@ def main():
     rc = RocketChat(RC_CONF, logger)
 
     # Execution structure
-    es = ExecutionStructure(ES_CONFIG, logger)
+    es = ExecutionStructure(ES_CONFIG, redisdb, logger)
 
-    publisher = PublishingMessage(zk, rs, rc, es, mongodb, logger)
+    publisher = PublishingMessage(zk, rs, rc, es, mongodb, redisdb, logger)
 
     # RabbitMQ
     #while True:

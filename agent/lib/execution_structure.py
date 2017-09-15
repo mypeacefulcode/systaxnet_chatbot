@@ -1,17 +1,24 @@
 #-*- coding: utf-8 -*-
 
+import sys
 import pandas as pd
+pd.set_option('display.width', 1000)
 import numpy as np
+import redis
 
 class ExecutionStructure(object):
-    def __init__(self, config, logger):
+    def __init__(self, config, redisdb, logger):
         self.logger = logger
         self.config = config
+        self.redisdb = redisdb
 
         # Make entities dataframe
         path = self.config['entities_config']['csv_path'] + '/'
-        csv_file = path + self.config['entities_config']['csv_entities_file']
-        self.entities = pd.read_csv(csv_file)
+        csv_file = path + self.config['entities_config']['csv_obj_entities_file']
+        self.obj_entities = pd.read_csv(csv_file)
+
+        csv_file = path + self.config['entities_config']['csv_mind_entities_file']
+        self.mind_entities = pd.read_csv(csv_file)
 
         csv_file = path + self.config['entities_config']['csv_actions_file']
         self.actions = pd.read_csv(csv_file)
@@ -50,7 +57,7 @@ class ExecutionStructure(object):
                 'head_token_idx':-1,
                 'words':None
             }
-        self.es_df = pd.DataFrame(columns=['kind','entities','action','branch','morphs','origin'])
+        self.es_df = pd.DataFrame(columns=['kind','obj_entities','mind_entities','obj_means','mind_means','action','branch','morphs','origin'])
 
         root_idxs = self.df.loc[self.df['label'] == 'ROOT']['token_idx'].tolist()
         branchs = []
@@ -168,8 +175,118 @@ class ExecutionStructure(object):
 
         return idxs, label, head_token_idx
 
-    def read_intent(self, es_dict):
+    def right_answer(self, es_how, context, sub_context):
+        if es_how['mind_means'].tolist() == [['아니다']]:
+            r_value = False
+        elif es_how['mind_means'].tolist() == [['맞다']]:
+            r_value = True
+        elif sub_context == 'select-order':
+            print(type(es_how['origin'][0].strip()))
+            print(es_how['origin'][0].strip())
+            if es_how['origin'][0].strip() in ['2 번','1 번']:
+                r_value = True
+            else:
+                r_value = False
+        else:
+            r_value = None
+            pass
+            """
+            if self.user_context['context'] == 'cancel-order':
+                if self.user_context['sub-context'] == 'begin':
+                if es_how['mind_means'].tolist() == [['아니다']]:
+                    r_value = False
+            """
+
+        return r_value
+
+    def get_next_context(self, context, sub_context):
+        next_context = ''
+        if context == 'cancel-order':
+            if sub_context == 'begin':
+                next_context = 'select-order'
+            elif sub_context == 'select-order':
+                next_context = 'finish'
+
+        return next_context
+
+    def get_context(self, user_id):
+        es_how = self.es_df[self.es_df['kind'] == 'how']
+        es_what = self.es_df[self.es_df['kind'] == 'what']
+        sub_context = context = response = "" 
+        
+        for key, values in self.config['context'].items():
+            if values['means'] == es_how['obj_means'].apply(sorted).apply(tuple).tolist():
+                context  = key
+
+        self.get_status(user_id)
+
+        if context == '' and self.user_context['context'] == '':
+            entities = es_how['obj_means'].tolist()
+            for entity in entities:
+                if 'need-to-object' in self.config['means'][entity[0]]['attribute']:
+                    print('------')
+                    print(es_what['obj_means'][0])
+                    t = [entity[0]] + es_what['obj_means'][0]
+                    t.sort()
+                    for key, values in self.config['context'].items():
+                        print(values['means'], [tuple(t)])
+                        if values['means'] == [tuple(t)]:
+                            context  = key
+
+        print("context :",context )
+
+        if context != "":
+            if es_how['action'].tolist() == [['하다']] or es_how['action'].tolist() == [[]]:
+                sub_context = "begin"
+        elif self.user_context['context'] != "":
+            context = self.user_context['context']
+            sub_context = self.user_context['sub-context']
+
+            flag = self.right_answer(es_how, context, sub_context)
+            if flag == False:
+                response = 'cancel'
+            elif flag == True:
+                next_context = self.get_next_context(context, sub_context)
+                sub_context = next_context
+            else:
+                sub_context = 'unknown'
+        else:
+            pass
+
+        print("sub_cotext:",sub_context)
+        print("obj_means:",es_how['obj_means'].tolist())
+        print("actions:",es_how['action'].tolist())
+        print("response:",response)
+        print("user_context:",self.user_context)
+
+        return context , sub_context, response
+
+    def get_status(self, user_id):
+        name = "CONTEXT-" + user_id
+        self.user_context = self.redisdb.hgetall(name)
+
+        if self.user_context == {}:
+            self.user_context = {
+                    'context':'',
+                    'sub-context':'',
+                    'prev-formatter':''
+            }
+
+    def save_user_context(self, user_id, context, response):
+        name = "CONTEXT-" + user_id
+
+        if context['sub-context'] == 'begin' and response == 'cancel':
+            context['context'] = ''
+            context['sub-context'] = ''
+        elif response == 'cancel':
+            context['sub-context'] = 'begin'
+
+        self.redisdb.hmset(name, context)
+
+    def read_intent(self, es_dict, user_id):
         self.es_dict = es_dict
+        self.user_id = user_id
+
         for key, values in self.es_dict.items():
             if len(values['tokens']) > 0:
                 morphs=[]
@@ -177,11 +294,61 @@ class ExecutionStructure(object):
                     t = morph_str.split('/')
                     morphs.append("/".join([t[0],t[2]]) if t[1] == 'None' else "/".join([t[1],t[2]]))
 
-                df = self.entities[self.entities['entity'].isin(morphs)]
-                entities = df['entity'].tolist()
-                df = self.actions[self.actions['action'].isin(morphs)]
+                df = self.obj_entities[self.obj_entities['entity'].isin(morphs)]
+                obj_entities = df['entity'].tolist()
+                obj_means = df['means'].tolist()
+                df = self.mind_entities[self.mind_entities['entity'].isin(morphs)]
+                mind_entities = df['entity'].tolist()
+                mind_means = df['means'].tolist()
+                df = self.actions[self.actions['words'].isin(morphs)]
                 actions = df['action'].tolist()
 
-                self.es_df.loc[len(self.es_df.index)] = [key, entities, actions, values['tokens'], morphs, values['words']]
+                self.es_df.loc[len(self.es_df.index)] = [key, obj_entities, mind_entities, obj_means, mind_means, actions, \
+                                                            values['tokens'], morphs, values['words']]
 
         print(self.es_df)
+        self.es_df.to_csv('es_df.csv', index=False)
+        self.context, self.sub_context, response  = self.get_context (user_id)
+
+        print("last context: {}, {}".format(self.context, self.sub_context))
+
+        return self.context, self.sub_context, response
+
+    def make_formatter(self, context, sub_context, response, check_dict):
+        validation_value = ''
+        for result in check_dict['results']:
+            condition, value = list(iter(result.items()))[0]
+            if value == False:
+                validation_value = self.config['validation_formatter'][condition]
+                break
+
+        if validation_value != '':
+            formatter = ' '.join([context, validation_value]) 
+        else:
+            formatter = ' '.join([context, sub_context, response]) 
+
+        return formatter
+
+    def set_user_context(self, user_id, context, sub_context, response, formatter):
+        self.user_context = {
+            'context':context,
+            'sub-context':sub_context,
+            'prev-formatter':formatter
+        }
+        self.save_user_context(user_id, self.user_context, response)
+
+    def check_domain(self, context, sub_context, user_id):
+        results = []
+        for condition in self.config['context'][context]['conditions']:
+            results.append({condition:getattr(self, condition)(context, sub_context)})
+            
+        check_dict = {
+            'results' : results
+        }
+        return check_dict
+
+    def exists_order(self, context, sub_context):
+        return True
+
+    def before_delivery(self, context, sub_context):
+        return True

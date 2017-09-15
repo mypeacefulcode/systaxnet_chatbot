@@ -1,4 +1,6 @@
 head_token_idx,label,pos,text,token_idx
-2,AUX,NOUN,환불,0
-0,SUFF,AFFIX,해,1
-2,ROOT,VERB,주세요,2
+1,NN,NOUN,주문,0
+2,DOBJ,NOUN,취소,1
+4,RCMOD,NOUN,취소,2
+2,SUFF,AFFIX,할,3
+4,ROOT,PRT,께,4
