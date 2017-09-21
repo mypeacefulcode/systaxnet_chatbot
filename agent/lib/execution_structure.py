@@ -117,6 +117,7 @@ class ExecutionStructure(object):
         r_idxs += idxs[:]
         return r_idxs
 
+    """ What에 해당하는 후보군 stack에서 추출 """ 
     def extract_what(self):
         print('what_stack:',self.what_stack)
         if len(self.what_stack) > 0:
@@ -175,6 +176,7 @@ class ExecutionStructure(object):
 
         return idxs, label, head_token_idx
 
+    """ 답변 검증 """
     def right_answer(self, es_how, context, sub_context):
         if es_how['mind_means'].tolist() == [['아니다']]:
             r_value = False
