@@ -55,7 +55,8 @@ class Syntaxnet(object):
         dec_idx = 0
         for token in response['tokens']:
             token_idx = idx
-            if token['dependencyEdge']['label'] == 'PRT':
+            # not used
+            if token['dependencyEdge']['label'] == '-------':
                 dec_idx += 1
                 token['partOfSpeech']['tag'] = d['pos'][idx-dec_idx]
                 token['text']['content'] = d['text'][idx-dec_idx] + token['text']['content']

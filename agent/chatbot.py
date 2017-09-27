@@ -45,8 +45,8 @@ class PublishingMessage(object):
                 df = syntaxnet.token_to_dataframe(response)
 
                 es_response = self.es.read_parse_tree(df)
-                print(es_response)
 
+                """
                 corpus = []
                 for kind in self.kinds:
                     words = es_response[kind]['words'] if es_response[kind]['words'] != None else ''
@@ -59,9 +59,9 @@ class PublishingMessage(object):
                     morph_str = self.regex.sub('',morphs)
                     es_response[self.kinds[idx]]['morphs']  = morph_str
                     idx += 1
+                """
 
-                print(es_response)
-                context, sub_context, response  = self.es.read_intent(es_response, _uid)
+                context, sub_context, response = self.es.read_intent(es_response, _uid, analyzer)
                 check_dict = self.es.check_domain(context, sub_context, _uid)
                 formatter = self.es.make_formatter(context, sub_context, response, check_dict)
 

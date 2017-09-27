@@ -3,6 +3,7 @@
 import sys
 import pandas as pd
 pd.set_option('display.width', 1000)
+pd.options.mode.chained_assignment = None
 import numpy as np
 import redis
 
@@ -12,21 +13,47 @@ class ExecutionStructure(object):
         self.config = config
         self.redisdb = redisdb
 
+        self.kinds = ['when','what','how','why']
+
         # Make entities dataframe
         path = self.config['entities_config']['csv_path'] + '/'
-        csv_file = path + self.config['entities_config']['csv_obj_entities_file']
-        self.obj_entities = pd.read_csv(csv_file)
+        csv_file = path + self.config['entities_config']['csv_entities_file']
+        self.entities = pd.read_csv(csv_file)
 
-        csv_file = path + self.config['entities_config']['csv_mind_entities_file']
-        self.mind_entities = pd.read_csv(csv_file)
+        csv_file = path + self.config['entities_config']['parse_label_file']
+        self.parse_label = pd.read_csv(csv_file)
 
-        csv_file = path + self.config['entities_config']['csv_actions_file']
-        self.actions = pd.read_csv(csv_file)
+    def verify_branchs(self, branchs):
+        check_label = token_idx = None
+        idx = 0
+        new_branchs = []
+        for branch in branchs:
+            label = self.pt_df[self.pt_df['token_idx'] == branch[-1:]]['label'].tolist().pop()
+            if set([label, check_label]) == set(['PRT','SUFF']) and branch[-2:-1] == check_idx:
+                if label == 'PRT':
+                    last_idx = branch[-1:]
+                    use_branch = idx - 1
+                else:
+                    last_idx = branchs[idx-1][-1:]
+                    use_branch = idx
+                new_branchs.pop()
+                branch = branchs[use_branch] + last_idx
+            elif label in ['PRT','SUFF']:
+                check_idx = branch[-2:-1]
+                check_label = label
+            else:
+                token_idx = -1
+                check_label = ""
+
+            new_branchs.append(branch)
+            idx += 1
+
+        return new_branchs
 
     def read_branchs(self, token_idx, tokens_idx, branchs):
         token_idx = int(token_idx)
 
-        c_df = self.df.loc[(self.df['head_token_idx'] == token_idx) & (self.df['token_idx'] != token_idx)]
+        c_df = self.pt_df.loc[(self.pt_df['head_token_idx'] == token_idx) & (self.pt_df['token_idx'] != token_idx)]
         rows, _ = c_df.shape
 
         if rows == 0:
@@ -44,11 +71,14 @@ class ExecutionStructure(object):
         return branchs, False
 
     def read_parse_tree(self, df):
-        self.df = df
-        self.df.to_csv('parse_tree.csv', index=False)
+        self.pt_df = df
+        self.pt_df['a_pos'] = pd.Series(index=self.pt_df.index)
+        self.pt_df['exec_pos'] = pd.Series(index=self.pt_df.index)
+        self.pt_df.to_csv('parse_tree.csv', index=False)
+        print(self.pt_df)
 
         self.es_dict = {}
-        for kind in ['when','what','how','why']:
+        for kind in self.kinds:
             self.es_dict[kind] = {}
             self.es_dict[kind] = {
                 'depth':-1,
@@ -59,12 +89,13 @@ class ExecutionStructure(object):
             }
         self.es_df = pd.DataFrame(columns=['kind','obj_entities','mind_entities','obj_means','mind_means','action','branch','morphs','origin'])
 
-        root_idxs = self.df.loc[self.df['label'] == 'ROOT']['token_idx'].tolist()
+        root_idxs = self.pt_df.loc[self.pt_df['label'] == 'ROOT']['token_idx'].tolist()
         branchs = []
         for root_idx in root_idxs:
             r_branchs, _ = self.read_branchs(root_idx, [int(root_idx)], [])
             branchs += r_branchs
 
+        branchs = self.verify_branchs(branchs)
         print("branchs:",branchs)
         br_df = pd.DataFrame(branchs).fillna(-1)
         br_df = br_df.astype(int)
@@ -81,19 +112,19 @@ class ExecutionStructure(object):
             t = br_df[cul_cols][r_idx:r_idx+1].values[0][::-1]
             t = t[np.where(t>-1)]
 
-            idxs, label, head_token_idx  = self.get_dependency(self.df.loc[t], dp)
+            idxs, label, head_token_idx  = self.get_branch_info(self.pt_df.loc[t], dp)
 
             #print("idxs1:",idxs)
             if prev_dp == dp:
                 pass
             elif prev_dp > dp or dp == 0:
-                idxs = self.extract_dependency(p_dependency, idxs)
+                idxs = self.concat_branch(p_dependency, idxs)
                 p_dependency.drop(p_dependency.index, inplace=True)
             elif prev_dp < dp:
                 pass
 
             #print("idxs2:",idxs)
-            if label in ['DOBJ','NSUBJ']:
+            if label in ['DOBJ','NSUBJ','NSUBJPASS']:
                 self.set_es('what', dp, label, idxs, head_token_idx)
             elif label in ['ADVCL']:
                 self.set_es('why', dp, label, idxs, head_token_idx)
@@ -105,11 +136,11 @@ class ExecutionStructure(object):
             prev_dp = dp
 
         if self.es_dict['what']['depth'] == -1:
-            self.extract_what()
+            self.get_what()
 
         return self.es_dict
 
-    def extract_dependency(self, df, idxs):
+    def concat_branch(self, df, idxs):
         r_idxs = []
         for index, row in df.iterrows():
             r_idxs += row['idxs']
@@ -117,8 +148,7 @@ class ExecutionStructure(object):
         r_idxs += idxs[:]
         return r_idxs
 
-    """ What에 해당하는 후보군 stack에서 추출 """ 
-    def extract_what(self):
+    def get_what(self):
         print('what_stack:',self.what_stack)
         if len(self.what_stack) > 0:
             for idxs, label, head_token_idx, depth in self.what_stack:
@@ -151,33 +181,27 @@ class ExecutionStructure(object):
         self.es_dict[kind]['head_token_idx'] = head_token_idx
 
         r = [ row['text'] if row['label'] in ['SUFF', 'PRT'] else ' ' + row['text'] \
-                    for index, row in self.df.loc[idxs].iterrows()]
+                    for index, row in self.pt_df.loc[idxs].iterrows()]
         self.es_dict[kind]['words'] = ''.join(r)
 
         return True
 
-    def get_dependency(self, df, depth):
-        backwards = False
+    def get_branch_info(self, df, depth):
         idxs = []
 
-        for index, row in df.iterrows():
-            if backwards:
-                idxs.insert(position,row['token_idx'])
-            else:
-                idxs.append(row['token_idx'])
-            
-            backwards, position = (True, len(idxs) - 1) if row['label'] in ['SUFF','PRT'] else (False, None)
+        for index, row in df[::-1].iterrows():
+            idxs.append(row['token_idx'])
         
-            label = row['label']
-            head_token_idx = row['head_token_idx']
+            if len(idxs) <= 1:
+                label = row['label']
+                head_token_idx = row['head_token_idx']
 
             if row['label'] in ['DOBJ']:
                 self.what_stack.append((idxs[:], label, head_token_idx, depth))
 
         return idxs, label, head_token_idx
 
-    """ 답변 검증 """
-    def right_answer(self, es_how, context, sub_context):
+    def verify_answer(self, es_how, context, sub_context):
         if es_how['mind_means'].tolist() == [['아니다']]:
             r_value = False
         elif es_how['mind_means'].tolist() == [['맞다']]:
@@ -211,11 +235,66 @@ class ExecutionStructure(object):
 
         return next_context
 
-    def get_context(self, user_id):
-        es_how = self.es_df[self.es_df['kind'] == 'how']
-        es_what = self.es_df[self.es_df['kind'] == 'what']
+    def read_dependency(self, branch):
+        print('------')
+        print(self.pt_df)
+        
+        parse_dict = {
+            'what':[],
+            'how':[],
+            'when':[],
+            'why':[]
+        }
+        prev_label = ''
+        dependency = []
+        for idx in branch[::-1]:
+            df = self.pt_df[self.pt_df['token_idx'] == idx]
+            label = df['label'].tolist().pop()
+            label_type = self.parse_label[self.parse_label['label'] == label]['type'].tolist().pop()
+            if label_type != 'pass':
+                if label == 'DEP':
+                    dependency.insert(0,idx)
+                else:
+                    if len(dependency) > 0:
+                        dependency.insert(0,idx)
+                        parse_dict[label_type].insert(0,dependency)
+                        dependency = []
+                    else:
+                        parse_dict[label_type].insert(0,idx)
+            prev_label = label
+        print('------')
+
+        return parse_dict
+
+    def get_entity_df(self, token):
+        pass
+
+    def read_context(self, entities):
+        """
+        #print(self.es_df)
+        print(self.es_dict)
+        #es_how = self.es_df[self.es_df['kind'] == 'how']
+        #es_what = self.es_df[self.es_df['kind'] == 'what']
         sub_context = context = response = "" 
         
+        #branch = self.es_df[self.es_df['kind'] == 'how']['branch'].tolist().pop()
+        branch = self.es_dict['how']['tokens']
+        print(type(branch))
+        print(branch)
+        parse_dict = self.read_dependency(branch)
+        print(parse_dict)
+
+        how = parse_dict['how']
+        what = parse_dict['what']
+
+        #branch = self.es_df[self.es_df['kind'] == 'what']['branch'].tolist().pop()
+        branch = self.es_dict['what']['tokens']
+        print(type(branch))
+        print(branch)
+        parse_dict = self.read_dependency(branch)
+        print(parse_dict)
+        """
+
         for key, values in self.config['context'].items():
             if values['means'] == es_how['obj_means'].apply(sorted).apply(tuple).tolist():
                 context  = key
@@ -244,7 +323,7 @@ class ExecutionStructure(object):
             context = self.user_context['context']
             sub_context = self.user_context['sub-context']
 
-            flag = self.right_answer(es_how, context, sub_context)
+            flag = self.verify_answer(es_how, context, sub_context)
             if flag == False:
                 response = 'cancel'
             elif flag == True:
@@ -285,10 +364,110 @@ class ExecutionStructure(object):
 
         self.redisdb.hmset(name, context)
 
-    def read_intent(self, es_dict, user_id):
+    def make_execution_structure(self, kind, idxs, exec_dict, analyzer):
+        """
+        exec_dict = {
+            "execution_entity":"",
+            "action_entity":"",
+            "purpose_entity":"",
+            "reason_entity":"",
+            "time_entity":""
+        }
+        """
+        prev_label = ""
+        for idx in idxs:
+            if type(idx) == list:
+                values = idx
+            else:
+                values  = [idx]
+
+            df = self.pt_df[self.pt_df['token_idx'].isin(values)]
+            label = df['label'].tolist()[0]
+            pos = df['pos'].tolist()[0]
+            first_value = values[0]
+
+            tokens = []
+            for index, row in df.iterrows():
+                if row['pos'] == "UNKNOWN":
+                    try:
+                        child_text = self.pt_df[self.pt_df['head_token_idx'] == first_value]['text'].tolist().pop()
+                    except IndexError:
+                        child_text = ""
+
+                    text = self.pt_df[self.pt_df['token_idx'] == first_value]['text'].tolist().pop()
+                    word = text + child_text
+
+                    response = analyzer.call(word).decode('utf-8')
+                    token = response.split('|')[0]
+                    token_pos = token.split('/')[1]
+                    self.pt_df.a_pos[self.pt_df.token_idx == first_value] = token_pos
+                    tokens.append(token)
+                else:
+                    self.pt_df.a_pos[self.pt_df.token_idx == first_value] = row['pos']
+                    tokens.append(row['text'] + "/" + row['pos'])
+
+            entities = self.entities[self.entities['word'].isin(tokens)]
+            entities = entities.fillna('None')
+
+            print("entities:",entities)
+
+            for index, e in entities.iterrows():
+                mean = e['means']
+
+                head_exec_pos = ""
+                if label != "ROOT":
+                    head_token_idx = self.pt_df[self.pt_df['token_idx'] == first_value]['head_token_idx'].tolist().pop()
+                    head_label = self.pt_df[self.pt_df['token_idx'] == head_token_idx]['label'].tolist().pop()
+                    head_pos = self.pt_df[self.pt_df['token_idx'] == head_token_idx]['a_pos'].tolist().pop()
+                    head_exec_pos = self.pt_df[self.pt_df['token_idx'] == head_token_idx]['exec_pos'].tolist().pop()
+                else:
+                    root_label = self.pt_df[self.pt_df['token_idx'] == first_value]['label'].tolist().pop()
+                    root_pos = self.pt_df[self.pt_df['token_idx'] == first_value]['a_pos'].tolist().pop()
+
+                exec_pos = ""
+                if label == 'ROOT':
+                    if 'need-to-obj' in e['attr']:
+                        exec_dict['action_entity'].insert(0,mean)
+                        exec_pos = "action_entity"
+                    else:
+                        if root_pos.upper() == "VERB":
+                            exec_dict['action_entity'].append(mean)
+                            exec_pos = "action_entity"
+                        else:
+                            exec_dict['execution_entity'].append(mean)
+                            exec_pos = "execution_entity"
+                elif label == 'SUFF':
+                    if head_label == 'ROOT':
+                        exec_dict['action_entity'].append(mean)
+                        exec_pos = "action_entity"
+                    elif head_label == 'AUX' and head_exec_pos == "execution_entity":
+                        exec_dict['action_entity'].insert(0,mean)
+                        exec_pos = "action_entity"
+                elif label in ['NN','NSUBJ','DOBJ']:
+                    if head_label == 'ROOT':
+                        exec_dict['execution_entity'].insert(0,mean)
+                        exec_pos = "execution_entity"
+                    elif head_label in ['NN','NSUBJ','DOBJ']:
+                        exec_dict[head_exec_pos].insert(0,mean)
+                        exec_pos = head_exec_pos
+                    else:
+                        exec_dict['purpose_entity'].append(mean)
+                        exec_pos = "purpose_entity"
+                elif label in ['AUX']:
+                    if head_label == 'ROOT':
+                        exec_dict['execution_entity'].insert(0,mean)
+                        exec_pos = "execution_entity"
+
+                self.pt_df.exec_pos[self.pt_df.token_idx == first_value] = exec_pos
+
+        return exec_dict
+
+    def read_intent(self, es_dict, user_id, analyzer):
+        print(es_dict)
         self.es_dict = es_dict
         self.user_id = user_id
 
+        """
         for key, values in self.es_dict.items():
             if len(values['tokens']) > 0:
                 morphs=[]
@@ -308,9 +487,40 @@ class ExecutionStructure(object):
                 self.es_df.loc[len(self.es_df.index)] = [key, obj_entities, mind_entities, obj_means, mind_means, actions, \
                                                             values['tokens'], morphs, values['words']]
 
-        print(self.es_df)
         self.es_df.to_csv('es_df.csv', index=False)
-        self.context, self.sub_context, response  = self.get_context (user_id)
+        """
+        print(es_dict)
+        sub_context = context = response = "" 
+        
+        branch = es_dict['how']['tokens']
+        print(type(branch))
+        print(branch)
+        parse_dict = self.read_dependency(branch)
+        print(parse_dict)
+
+        exec_dict = {
+            "execution_entity":[],
+            "action_entity":[],
+            "purpose_entity":[],
+            "reason_entity":[],
+            "time_entity":[]
+        }
+        for key, value in parse_dict.items():
+            if key in ['how','what']:
+                exec_dict = self.make_execution_structure(key,value, exec_dict, analyzer)
+
+        branch = es_dict['what']['tokens']
+        print(type(branch))
+        print(branch)
+        parse_dict = self.read_dependency(branch)
+        print(parse_dict)
+        for key, value in parse_dict.items():
+            if key in ['how','what']:
+                exec_dict = self.make_execution_structure(key,value, exec_dict, analyzer)
+
+        print(exec_dict)
+        print(self.pt_df)
+        self.context, self.sub_context, response  = self.read_context(user_id)
 
         print("last context: {}, {}".format(self.context, self.sub_context))
 

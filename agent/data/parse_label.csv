@@ -1,0 +1,12 @@
+label,type
+ADVMOD,why
+AUX,how
+DEP,what
+DOBJ,what
+NN,what
+NSUBJ,what
+NSUBJPASS,what
+PRT,pass
+ROOT,how
+SUFF,how
+JOSA,pass

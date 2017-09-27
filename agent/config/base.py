@@ -21,9 +21,8 @@ MSG_PROCESSING_ALREADY = "processing already"
 ES_CONFIG = {
     'entities_config' : {
         'csv_path':'./data',
-        'csv_obj_entities_file':'obj_entities.csv',
-        'csv_mind_entities_file':'mind_entities.csv',
-        'csv_actions_file':'actions.csv'
+        'csv_entities_file':'entities.csv',
+        'parse_label_file':'parse_label.csv'
     },
     # Context 
     # [환불, 주문취소, 배송, 기타]
@@ -52,6 +51,9 @@ ES_CONFIG = {
     # Means
     "means" : {
         'cancel' : {
+            'attribute' : ['need-to-object']
+        },
+        'request' : {
             'attribute' : ['need-to-object']
         }
     },
