@@ -28,22 +28,22 @@ ES_CONFIG = {
     # [환불, 주문취소, 배송, 기타]
     'context' : {
         'cancel-order': {
-            'means' : [('cancel','order')],
+            'means' : ['cancel','order'],
             'conditions' : ['exists_order','before_delivery'],
             'action' : ['cancel-order']
         },
         'refund' : {
-            'means' : [('refund',)],
+            'means' : ['refund'],
             'conditions' : ['exists_order'],
             'action' : ['refund']
         },
         'delivery' : {
-            'means' : [('delivery',)],
+            'means' : ['delivery'],
             'conditions' : ['exists_order'],
             'action' : ['delivery']
         },
         'etc' : {
-            'means' : [('question',)],
+            'means' : ['question'],
             'conditions' : [],
             'action' : ['etc']
         }

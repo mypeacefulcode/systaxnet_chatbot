@@ -11,6 +11,7 @@ word,type,means,attr,actions,is_real
 주세요/VERB,act,주다,,,False
 하고/AFFIX,act,하다,,,False
 하다/Verb,act,하다,,,False
+할/AFFIX,act,하다,,,False
 할께/AFFIX,act,하다,,,False
 해/AFFIX,act,하다,,,False
 해주다/Verb,act,하다,,,False
@@ -27,5 +28,6 @@ word,type,means,attr,actions,is_real
 생각/NOUN,obj,wait,"하다,나다",False
 신청/NOUN,obj,request,need-to-obj,"하다",False
 주문/NOUN,obj,order,하다,False
+주문취소/NOUN,obj,"order,cancel",하다,False
 취소/NOUN,obj,cancel,need-to-obj,하다,False
 환불/NOUN,obj,refund,하다,False
