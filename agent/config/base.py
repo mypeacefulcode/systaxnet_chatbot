@@ -60,5 +60,6 @@ ES_CONFIG = {
     "validation_formatter" : {
         'exists_order' : 'error-exists-order',
         'before_delivery' : 'error-before-delivery'
-    }
+    },
+    "special_obj" : ['order','cancel','refund']
 }

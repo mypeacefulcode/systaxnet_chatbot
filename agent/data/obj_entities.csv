@@ -1,7 +1,0 @@
-entity,actions,attributes,sentiment,means
-물건/NOUN,"받다,주다",real,nat,thing
-생각/NOUN,"하다,나다",unreal,nat,wait
-신청/NOUN,"하다",unreal,nat,request
-주문/NOUN,하다,unreal,pos,order
-취소/NOUN,하다,unreal,neg,cancel
-환불/NOUN,하다,unreal,neg,refund
