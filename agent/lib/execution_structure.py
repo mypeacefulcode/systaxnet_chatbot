@@ -1,6 +1,6 @@
 #-*- coding: utf-8 -*-
 
-import sys
+import sys, traceback
 import pandas as pd
 pd.set_option('display.width', 1000)
 pd.options.mode.chained_assignment = None
@@ -77,6 +77,7 @@ class ExecutionStructure(object):
                     child_text = self.pt_df[(self.pt_df['head_token_idx'] == index) & \
                                                 (self.pt_df['token_idx'] != index)]['text'].tolist().pop()
                 except IndexError:
+                    traceback.print_exc()
                     child_text = ""
 
                 text = self.pt_df[self.pt_df['token_idx'] == index]['text'].tolist().pop()
@@ -94,7 +95,6 @@ class ExecutionStructure(object):
         self.pt_df['a_pos'] = pd.Series(index=self.pt_df.index)
         self.pt_df['exec_pos'] = pd.Series(index=self.pt_df.index)
         self.pt_df.to_csv('parse_tree.csv', index=False)
-        print(self.pt_df)
 
         self.es_dict = {}
         for kind in self.kinds:
@@ -256,27 +256,40 @@ class ExecutionStructure(object):
         }
         prev_label = ''
         dependency = []
-        for idx in branch[::-1]:
-            df = self.pt_df[self.pt_df['token_idx'] == idx]
-            label = df['label'].tolist().pop()
-            label_type = self.parse_label[self.parse_label['label'] == label]['type'].tolist().pop()
-            if label_type != 'pass':
-                if label == 'DEP':
-                    dependency.insert(0,idx)
-                else:
-                    if len(dependency) > 0:
+
+        try:
+            print("read dependency -> branch:",branch)
+            for idx in branch[::-1]:
+                df = self.pt_df[self.pt_df['token_idx'] == idx]
+                label = df['label'].tolist().pop()
+                head_token_idx = df['head_token_idx'].tolist().pop()
+                head_df = self.pt_df[self.pt_df['token_idx'] == head_token_idx]
+                head_label = head_df['label'].tolist().pop()
+
+                label_type = self.parse_label[self.parse_label['label'] == label]['type'].tolist().pop()
+                if label_type != 'pass':
+                    if label in ['DEP','RCMOD','NN']:
                         dependency.insert(0,idx)
-                        parse_dict[label_type].insert(0,dependency)
-                        dependency = []
                     else:
-                        parse_dict[label_type].insert(0,idx)
-            prev_label = label
+                        if len(dependency) > 0:
+                            dependency.insert(0,idx)
+                            parse_dict[label_type].insert(0,dependency)
+                            dependency = []
+                        else:
+                            parse_dict[label_type].insert(0,idx)
+                prev_label = label
+        except IndexError:
+            traceback.print_exc()
+            print("Unknown parse label:", label)
+
+        if len(dependency) > 0:
+            parse_dict[label_type] = [parse_dict[label_type] + dependency]
 
         return parse_dict
 
     def read_context(self, user_id, exec_dict):
-
         context = ""
+        # Normal case
         for key, values in self.config['context'].items():
             if set(values['means']).issubset(set(exec_dict['execution_entity'])):
                 context  = key
@@ -288,6 +301,19 @@ class ExecutionStructure(object):
             for key, values in self.config['context'].items():
                 if set(values['means']).issubset(set(exec_dict['action_entity'])):
                     context  = key
+
+        if context == "":
+            for key, values in self.config['context'].items():
+                if set(values['means']).issubset(set(exec_dict['purpose_entity'])):
+                    if '하다' in exec_dict['execution_entity']:
+                        context  = key
+
+        if context == "":
+            for key, values in self.config['context'].items():
+                if set(values['means']).issubset(set(exec_dict['purpose_entity'] + exec_dict['action_entity'])):
+                    if exec_dict['execution_entity'] == []:
+                        exec_dict['action_entity'].append('하다')
+                        context  = key
 
         print("context :",context )
         self.get_status(user_id)
@@ -352,18 +378,16 @@ class ExecutionStructure(object):
         }
         """
         print("es_idxs:",idxs)
-        print("es_df:",self.pt_df)
         prev_label = ""
         child_entity = {}
         self.pt_df = self.pt_df.fillna('')
-        self.analyze_pos(analyzer)
 
         for idx in idxs:
             if type(idx) == list:
                 for i in idx[::-1]:
                     t_df = self.pt_df[self.pt_df['token_idx']==i]
                     row = t_df.ix[t_df.index[0]]
-                    token = row['text'] + "/" + row['pos']
+                    token = row['text'] + "/" + row['a_pos']
 
                     e = self.entities[self.entities['word'] == token]
                     e = e.fillna('None')
@@ -376,6 +400,9 @@ class ExecutionStructure(object):
                     if set(mean).issubset(set(self.config['special_obj'])):
                         p_e = e
                         p_mean = mean
+                    elif set(mean).issubset(set(self.config['special_act'])):
+                        p_e = e
+                        p_mean = mean
                 e_idx = i
                 e = e if p_e.size == 0 else p_e
                 mean = mean if p_e.size == 0 else p_mean
@@ -384,7 +411,7 @@ class ExecutionStructure(object):
 
                 t_df = self.pt_df[self.pt_df['token_idx']==e_idx]
                 row = t_df.ix[t_df.index[0]]
-                token = row['text'] + "/" + row['pos']
+                token = row['text'] + "/" + row['a_pos']
 
                 e = self.entities[self.entities['word'] == token]
                 e = e.fillna('None')
@@ -394,7 +421,6 @@ class ExecutionStructure(object):
 
                 e = e.ix[e.index[0]]
                 mean = e['means'].split(',')
-
 
             if e.size > 0:
                 label = self.pt_df[self.pt_df['token_idx'] == e_idx]['label'].tolist().pop()
@@ -469,7 +495,6 @@ class ExecutionStructure(object):
         return exec_dict
 
     def read_intent(self, es_dict, user_id, analyzer):
-        print(es_dict)
         self.es_dict = es_dict
         self.user_id = user_id
 
@@ -482,6 +507,11 @@ class ExecutionStructure(object):
             "reason_entity":[],
             "time_entity":[]
         }
+
+        self.analyze_pos(analyzer)
+
+        print("self.es_dict:\n",self.es_dict)
+        print("self.pt_df:\n",self.pt_df)
 
         branch = es_dict['how']['tokens']
         parse_dict = self.read_dependency(branch)

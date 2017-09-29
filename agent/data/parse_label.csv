@@ -7,6 +7,7 @@ NN,what
 NSUBJ,what
 NSUBJPASS,what
 PRT,pass
+RCMOD,how
 ROOT,how
 SUFF,how
 JOSA,pass

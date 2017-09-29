@@ -42,6 +42,23 @@ class Syntaxnet(object):
 
         return result
 
+    def verify_parse_tree(self, df):
+        bug_tokens = [("UNKNOWN","할께")]
+
+        for pos, text in bug_tokens:
+            t_df = df[(df['pos'] == pos) & (df['text'] == text)]
+            if t_df.size > 0:
+                token_idx = t_df['token_idx'].tolist().pop()
+                bug_df = df[(df['head_token_idx'] == token_idx) & (df['token_idx'] != token_idx)]
+                child_idxs = bug_df['token_idx'].tolist()
+
+                for child_idx in child_idxs:
+                    child_df = df[df['token_idx'] == child_idx]
+                    if child_df['label'].tolist().pop() == 'NN':
+                        df.label[df.token_idx == child_idx] = 'DOBJ'
+
+        return df
+
     def token_to_dataframe(self, response):
         d = {
                 'token_idx':[],
@@ -77,5 +94,6 @@ class Syntaxnet(object):
 
         df = pd.DataFrame.from_dict(d)
         df = df.set_index(df['token_idx'])
+        df = self.verify_parse_tree(df)
 
         return df

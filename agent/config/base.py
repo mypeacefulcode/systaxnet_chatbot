@@ -61,5 +61,6 @@ ES_CONFIG = {
         'exists_order' : 'error-exists-order',
         'before_delivery' : 'error-before-delivery'
     },
-    "special_obj" : ['order','cancel','refund']
+    "special_obj" : ['order','cancel','refund'],
+    "special_act" : ['하다']
 }
