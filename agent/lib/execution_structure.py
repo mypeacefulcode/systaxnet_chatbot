@@ -5,7 +5,7 @@ import pandas as pd
 pd.set_option('display.width', 1000)
 pd.options.mode.chained_assignment = None
 import numpy as np
-import redis
+import redis, re
 
 class ExecutionStructure(object):
     def __init__(self, config, redisdb, logger):
@@ -296,6 +296,21 @@ class ExecutionStructure(object):
 
         return parse_dict
 
+    def verify_context(self, context_df, exec_dict):
+        p = re.compile('.*\+')
+        for index, row in context_df.iterrows():
+            check_flag = True
+            for key in ['execution','action','purpose','reason','time']:
+                items = row[key].split(',')
+                for item in items:
+                    if p.match(item) and item[:-1] not in exec_dict[key + '_entity']:
+                        check_flag = False
+
+            if check_flag:
+                return True, row
+
+        return False, None
+
     def read_context(self, user_id, exec_dict):
         context = ""
 
@@ -320,7 +335,9 @@ class ExecutionStructure(object):
         elif row == 0:
             print("Check domain exp!")
         else:
-            context = context_df['domain'].tolist().pop()
+            check_flag, context_row = self.verify_context(context_df, exec_dict)
+            if check_flag:
+                context = context_row['domain']
 
         print("context :",context )
         self.get_status(user_id)
