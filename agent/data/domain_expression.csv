@@ -1,0 +1,9 @@
+domain,execution,action,purpose,reason,time
+cancel-order,"cancel+,order+","하다,싶다",,,
+cancel-order,"cancel+,order+",,,,
+cancel-order,order+,"cancel+,하다,싶다",,,
+refund,"thing,refund+","하다,싶다",,,
+refund,"thing,refund+",,,,
+refund,,"refund+,하다,싶다",,,
+delivery,"order+","오다+",,,"when"
+delivery,"delivery+","늦다+",,,"when"

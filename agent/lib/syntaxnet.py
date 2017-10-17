@@ -51,6 +51,7 @@ class Syntaxnet(object):
                 token_idx = t_df['token_idx'].tolist().pop()
                 bug_df = df[(df['head_token_idx'] == token_idx) & (df['token_idx'] != token_idx)]
                 child_idxs = bug_df['token_idx'].tolist()
+                print("child-idxs:",child_idxs)
 
                 for child_idx in child_idxs:
                     child_df = df[df['token_idx'] == child_idx]

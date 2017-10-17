@@ -1,11 +1,15 @@
 label,type
+ADVCL,why
 ADVMOD,why
 AUX,how
 DEP,what
 DOBJ,what
+NEG,why
 NN,what
 NSUBJ,what
 NSUBJPASS,what
+NUM,what
+P,how
 PRT,pass
 RCMOD,how
 ROOT,how

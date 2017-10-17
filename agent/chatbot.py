@@ -144,7 +144,7 @@ def main():
     publisher = PublishingMessage(zk, rs, rc, es, mongodb, redisdb, logger)
 
     # RabbitMQ
-    #while True:
+    # while True:
     try: 
         logger.info("[*] Waiting for messages")
         blocking_connection(publisher)

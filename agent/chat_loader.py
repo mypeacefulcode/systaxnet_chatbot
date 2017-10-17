@@ -39,11 +39,11 @@ def main():
         lock = zk.Lock(ZOOKEEPER_LOCK_PATH, os.getpid())
         with lock:
             position = cl.load_position()
-            print("Position is: %s" % position)
+            logger.info("Position is: %s" % position)
 
             messages, max_ts = cl.load_data(position)
 
-            print("Get data: %s" % messages)
+            logger.info("Get data: %s" % messages)
             try:
                 cl.put_data(messages)
             except:

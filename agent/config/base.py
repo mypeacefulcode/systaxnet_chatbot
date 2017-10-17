@@ -22,31 +22,36 @@ ES_CONFIG = {
     'entities_config' : {
         'csv_path':'./data',
         'csv_entities_file':'entities.csv',
-        'parse_label_file':'parse_label.csv'
+        'parse_label_file':'parse_label.csv',
+        'domain_exp_file':'domain_expression.csv',
     },
     # Context 
     # [환불, 주문취소, 배송, 기타]
     'context' : {
         'cancel-order': {
-            'means' : ['cancel','order'],
             'conditions' : ['exists_order','before_delivery'],
             'action' : ['cancel-order']
         },
         'refund' : {
-            'means' : ['refund'],
             'conditions' : ['exists_order'],
             'action' : ['refund']
         },
         'delivery' : {
-            'means' : ['delivery'],
             'conditions' : ['exists_order'],
             'action' : ['delivery']
         },
         'etc' : {
-            'means' : ['question'],
             'conditions' : [],
             'action' : ['etc']
         }
+    },
+    'context-expression' : {
+        'cancel-order': [
+            {}
+        ],
+        'delivery' : [
+            {'reason_entity':'늦다','purpose_entity':'thiing','action_entity':'오다'}
+        ]
     },
     # Means
     "means" : {
