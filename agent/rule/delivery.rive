@@ -1,0 +1,7 @@
+! version = 0.1
+
+// Bot variables
+!var name = chatbot
+
++ delivery begin
+- 배송 확인을 하시겠습니까?

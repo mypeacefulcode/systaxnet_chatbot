@@ -1,7 +1,0 @@
-entity,sentiment,means
-아니다/Adjective,neg,아니다
-맞다/Verb,pos,맞다
-응/Noun,pos,맞다
-당근/Noun,pos,맞다
-그렇다/Adjective,pos,맞다
-네/Noun,pos,맞다

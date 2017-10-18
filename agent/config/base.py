@@ -21,42 +21,51 @@ MSG_PROCESSING_ALREADY = "processing already"
 ES_CONFIG = {
     'entities_config' : {
         'csv_path':'./data',
-        'csv_obj_entities_file':'obj_entities.csv',
-        'csv_mind_entities_file':'mind_entities.csv',
-        'csv_actions_file':'actions.csv'
+        'csv_entities_file':'entities.csv',
+        'parse_label_file':'parse_label.csv',
+        'domain_exp_file':'domain_expression.csv',
     },
     # Context 
     # [환불, 주문취소, 배송, 기타]
     'context' : {
         'cancel-order': {
-            'means' : [('cancel','order')],
             'conditions' : ['exists_order','before_delivery'],
             'action' : ['cancel-order']
         },
         'refund' : {
-            'means' : [('refund',)],
             'conditions' : ['exists_order'],
             'action' : ['refund']
         },
         'delivery' : {
-            'means' : [('delivery',)],
             'conditions' : ['exists_order'],
             'action' : ['delivery']
         },
         'etc' : {
-            'means' : [('question',)],
             'conditions' : [],
             'action' : ['etc']
         }
     },
+    'context-expression' : {
+        'cancel-order': [
+            {}
+        ],
+        'delivery' : [
+            {'reason_entity':'늦다','purpose_entity':'thiing','action_entity':'오다'}
+        ]
+    },
     # Means
     "means" : {
         'cancel' : {
+            'attribute' : ['need-to-object']
+        },
+        'request' : {
             'attribute' : ['need-to-object']
         }
     },
     "validation_formatter" : {
         'exists_order' : 'error-exists-order',
         'before_delivery' : 'error-before-delivery'
-    }
+    },
+    "special_obj" : ['order','cancel','refund'],
+    "special_act" : ['하다']
 }
