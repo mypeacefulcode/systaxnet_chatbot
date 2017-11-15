@@ -1,9 +1,4 @@
 head_token_idx,label,pos,text,token_idx,a_pos,exec_pos
-2,RCMOD,NOUN,주문,0,,
-0,SUFF,AFFIX,한,1,,
-5,NSUBJ,NOUN,물건,2,,
-2,PRT,PRT,이,3,,
-5,ADVMOD,ADV,너무,4,,
-6,ADVCL,UNKNOWN,늦게,5,,
-6,ROOT,UNKNOWN,와,6,,
-6,PRT,PRT,요,7,,
+2,AUX,NOUN,환불,0,,
+0,SUFF,AFFIX,해,1,,
+2,ROOT,VERB,주세요,2,,

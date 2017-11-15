@@ -39,38 +39,30 @@ class PublishingMessage(object):
         if not lock.is_acquired:
             reply = self.rs.reply("localuser", MSG_PROCESSING_ALREADY)
         else:
-            response = syntaxnet.analyze_syntax(doc['msg'])
-            if not 'error' in response.keys():
-                result = syntaxnet.token_to_string(response)
-                df = syntaxnet.token_to_dataframe(response)
-
-                es_response = self.es.read_parse_tree(df)
-
-                """
-                corpus = []
-                for kind in self.kinds:
-                    words = es_response[kind]['words'] if es_response[kind]['words'] != None else ''
-                    corpus.append(words)
-
-                response = analyzer.call(' -+- '.join(corpus)).decode('utf-8').split(":@")
-
-                idx = 0
-                for morphs in response[1].split("-+-/None/Punctuation"):
-                    morph_str = self.regex.sub('',morphs)
-                    es_response[self.kinds[idx]]['morphs']  = morph_str
-                    idx += 1
-                """
-
-                context, sub_context, response = self.es.read_intent(es_response, _uid, analyzer)
-                check_dict = self.es.check_domain(context, sub_context, _uid)
-                formatter = self.es.make_formatter(context, sub_context, response, check_dict)
-
-                self.es.set_user_context(_uid, context, sub_context, response, formatter)
-
-                reply = self.make_reply(formatter)
+            if doc['msg'][:2] == "&&":
+                formatter = doc['msg'].replace('\n','&enter ')
+                print("formatter:",formatter)
+                reply = self.make_reply(formatter).replace('&enter ','\n')
             else:
-                self.logger.error(response['error'])
-                reply = SYSTEM_ERROR_MESSAGE
+                response = syntaxnet.analyze_syntax(doc['msg'])
+                if not 'error' in response.keys():
+                    result = syntaxnet.token_to_string(response)
+                    df = syntaxnet.token_to_dataframe(response)
+    
+                    es_response = self.es.make_execution_structure(df, analyzer)
+
+                    domain, context = self.es.read_intent(es_response, _uid)
+                    if domain:
+                        check_dict = self.es.check_domain(domain, context, _uid)
+                        formatter = self.es.make_formatter(domain, context, check_dict)
+                    else:
+                        formatter = ""
+
+                    self.es.set_user_context(_uid, domain, context, formatter)
+                    reply = self.make_reply(formatter)
+                else:
+                    self.logger.error(response['error'])
+                    reply = SYSTEM_ERROR_MESSAGE
 
             self.rc.send_message(rc_channel, reply)
 
