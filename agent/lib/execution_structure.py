@@ -6,6 +6,7 @@ pd.set_option('display.width', 1000)
 pd.options.mode.chained_assignment = None
 import numpy as np
 import redis, re, json
+from .entities import *
 
 class ExecutionStructure(object):
     def __init__(self, config, redisdb, logger):
@@ -366,11 +367,20 @@ class ExecutionStructure(object):
         print("self.pt_df:\n",self.pt_df)
 
         es_dict = self.read_parse_dict(self.parse_dict)
-        print("es_dict:",es_dict)
-        mean, context = self.infer_meaning(es_dict)
-        print("meaning, context:", mean, context)
+        print("final es_dict:",es_dict)
 
-        return mean, context
+        try:
+            es_action = es_dict['action'] if es_dict['action'] else 'do'
+            es_subject = es_dict['subject'] if es_dict['subject'] else 'entity'
+
+            domain, context, *params = getattr(eval(es_subject), es_action)(es_dict['object'], es_dict)
+            print("Call subject class: {0}, {1}, {2}".format(domain, context, params))
+        except NameError:
+            cls = self.entities[self.entities['means'] == es_dict['subject']]['type'].tolist().pop()
+            domain, context, *params = getattr(eval('cls_' + cls), es_action)(es_dict['object'], es_dict)
+            print("Call subject class: {0}, {1}, {2}".format(domain, context, params))
+
+        return domain, context, params
 
     def make_formatter(self, domain, context, check_dict):
         validation_value = ''

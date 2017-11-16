@@ -1,4 +1,2 @@
 head_token_idx,label,pos,text,token_idx,a_pos,exec_pos
-2,AUX,NOUN,환불,0,,
-0,SUFF,AFFIX,해,1,,
-2,ROOT,VERB,주세요,2,,
+0,ROOT,NOUN,반가워,0,,
