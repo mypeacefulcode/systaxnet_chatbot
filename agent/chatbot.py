@@ -51,16 +51,16 @@ class PublishingMessage(object):
     
                     es_response = self.es.make_execution_structure(df, analyzer)
 
-                    domain, context, params = self.es.read_intent(es_response, _uid)
+                    domain, answer, params = self.es.read_intent(es_response, _uid)
 
                     if domain:
                         #check_dict = self.es.check_domain(domain, context, _uid)
                         #formatter = self.es.make_formatter(domain, context, check_dict)
-                        formatter = ' '.join([domain, context])
+                        formatter = ' '.join([domain, answer])
                     else:
                         formatter = ""
 
-                    self.es.set_user_context(_uid, domain, context, formatter)
+                    self.es.save_user_context(_uid, params)
                     print("formatter:", formatter)
                     reply = self.make_reply(formatter)
                 else:

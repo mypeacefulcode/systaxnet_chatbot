@@ -5,7 +5,7 @@ import pandas as pd
 pd.set_option('display.width', 1000)
 pd.options.mode.chained_assignment = None
 import numpy as np
-import redis, re, json
+import redis, re, ast 
 from .entities import *
 
 class ExecutionStructure(object):
@@ -25,6 +25,8 @@ class ExecutionStructure(object):
         csv_file = path + self.config['entities_config']['domain_exp_file']
         self.domain_exp = pd.read_csv(csv_file).fillna("")
 
+        setattr(entity, 'entity_dict', self.entities)
+        
     def analyze_pos(self, analyzer):
         for index, row in self.pt_df.iterrows():
             if row['pos'] == "UNKNOWN":
@@ -50,36 +52,43 @@ class ExecutionStructure(object):
         print("labels_set, my_label, parent_es_kind:", labels_set, my_label, parent_es_kind)
 
         time_entity = False
-        mean =  entity['means'].tolist()
-        if len(mean) > 0:
-            if mean[0].split(',')[0] in ['day']:
+        meaning =  entity['meanings'].tolist()
+        if len(meaning) > 0:
+            if meaning[0].split(',')[0] in ['day']:
                 time_entity = True
 
         es_kind = None
 
-        es_action = set(['ROOT-VERB','ROOT-PRT','ROOT-ADJ','ADVCL-VERB','ROOT-ADJECTIVE','SUFF'])
-        es_subject = set(['ROOT-NOUN','NSUBJ','AUX','CCOMP','ADVCL-NOUN'])
+        es_action = set(['ROOT-VERB','ROOT-PRT','ROOT-ADJ','ADVCL-VERB','ROOT-ADJECTIVE','AUX-VERB','SUFF'])
+        es_subject = set(['ROOT-NOUN','NSUBJ','AUX-NOUN','CCOMP','ADVCL-NOUN','DOBJ','NN'])
         es_modifier = set(['RCMOD','ADVMOD','ATTR'])
-        es_object = set(['DOBJ'])
+        es_object = set(['DOBJ','NN'])
         es_special = set(['NEG', 'NUM'])
 
         if depth <= 1:
-            for key, labels in [('action', es_action), ('subject',es_subject), ('object',es_object), ('modifier',es_modifier), ('special',es_special)]:
+            for key, labels in [('object',es_object), ('action', es_action), ('subject',es_subject), ('modifier',es_modifier), ('special',es_special)]:
                 s = labels_set.intersection(labels)
                 print("S:",s)
                 if my_label in s and key == 'modifier':
-                    es_kind = key
+                    if my_label == 'ATTR' and parent_es_kind == 'action':
+                        es_kind = 'action'
+                    else:
+                        es_kind = key
                 elif len(s) > 0 and my_label == s.pop():
                     es_kind = key
                     print("loop es kind:", key)
         else:
-            print("dept else - my_label, parent_label:",my_label, parent_label)
+            print("dept else - my_label, parent_label, parent_es_kind:",my_label, parent_label, parent_es_kind)
             if my_label == "SUFF" and parent_es_kind == 'subject':
                 es_kind = "subject_suff"
             elif my_label == "DEP" and parent_es_kind == 'object':
                 es_kind = "object"
+            elif my_label == "NN" and parent_es_kind == "object":
+                es_kind = "object"
             elif my_label == "NN" and parent_es_kind == "subject":
                 es_kind = "object"
+            elif my_label in ["NN","DOBJ"] and parent_es_kind == "action":
+                es_kind = "subject"
             elif my_label in es_special:
                 es_kind = "special"
 
@@ -98,7 +107,8 @@ class ExecutionStructure(object):
         es_kind = self.dependency_label_rule(e, label, parent_label, brothers_label, depth, parent_es_kind)
         print("------------------------ sub end ---------------------------")
 
-        return es_kind, e_key
+        return_str = e_key + ":" + label + "/" + str(token['token_idx'].tolist().pop())
+        return es_kind, return_str
 
     def merge_es_dict(self, es_kind, child_label, parse_dict, child_parse_dict):
 
@@ -129,6 +139,8 @@ class ExecutionStructure(object):
                     if es_kind + '_num' not in parse_dict.keys():
                         parse_dict[es_kind + '_num'] = []
                     parse_dict[es_kind + '_num'] += child_parse_dict[child_es_kind]
+            elif es_kind == 'object' and child_es_kind in ['object']:
+                parse_dict[es_kind] += child_parse_dict[child_es_kind]
             else:
                 parse_dict.update(child_parse_dict)
 
@@ -188,7 +200,7 @@ class ExecutionStructure(object):
 
         root_idx = self.pt_df.loc[self.pt_df['label'] == 'ROOT']['token_idx'].tolist().pop()
 
-        df = self.pt_df.loc[self.pt_df['label'].isin(['ROOT','ADVCL'])]
+        df = self.pt_df.loc[self.pt_df['label'].isin(['ROOT','ADVCL','AUX'])]
         tokens = zip(df['token_idx'].tolist(), df['label'].tolist(), df['a_pos'].tolist())
 
         for idx, label, pos in tokens:
@@ -249,31 +261,41 @@ class ExecutionStructure(object):
 
         return False, None
 
-    def get_status(self, user_id):
-        name = "CONTEXT-" + user_id
-        self.user_context = self.redisdb.hgetall(name)
+    def get_user_convo(self, user_id):
+        name = "CONVO-" + user_id
+        user_convo = self.redisdb.hgetall(name)
 
-        if self.user_context == {}:
-            self.user_context = {
-                    'context':'',
-                    'sub-context':'',
-                    'prev-formatter':''
+        if user_convo== {}:
+            user_convo = {
+                'context' : None,
+                'prev_sao' : {},
+                'formatter' : None,
+                'request' : None,
+                'args' : {}
             }
+        else:
+            user_convo['prev_sao'] = ast.literal_eval(user_convo['prev_sao'])
+            user_convo['args'] = ast.literal_eval(user_convo['args'])
+            if user_convo['request'] == 'None':
+                user_convo['request'] = None
 
-    def save_user_context(self, user_id, user_context):
-        name = "CONTEXT-" + user_id
-        self.redisdb.hmset(name, user_context)
+        return user_convo
 
-    def get_mean(self, word):
-        print("word:",word)
+    def save_user_context(self, user_id, user_convo):
+        name = "CONVO-" + user_id
+        self.redisdb.hmset(name, user_convo)
+
+    def get_meaning(self, ekey):
+        word = ekey.split(':')[0]
+        print("word:",word,ekey)
         e = self.entities[self.entities['word'] == word]
         row, _ = e.shape
         if row == 1:
-            mean = e['means'].tolist().pop()
+            meaning = e['meanings'].tolist().pop() + ':' + ekey.split(':')[1]
         else:
-            mean = None
+            meaning = None
 
-        return mean
+        return meaning 
 
     def infer_meaning(self, es_dict):
         
@@ -313,45 +335,89 @@ class ExecutionStructure(object):
 
         return domain, context
 
+    def reset_parse_dict(self, es_type, meanings):
+        es_subject = set(['ROOT-NOUN','NSUBJ','AUX','CCOMP','ADVCL-NOUN','NN'])
+        es_object = set(['ADVMOD'])
+
+        actions = objects = main_meaning =  None
+        if len(meanings) > 1:
+            labels_set = []
+            for meaning in meanings:
+                if meaning:
+                    print("meaning:",meaning)
+                    temp = meaning.split(':')
+                    print("temp, temp[1]:",temp, temp[1])
+                    label, token_idx = temp[1].split('/')
+                    labels_set.append(label)
+            labels_set = set(labels_set)
+
+            if es_type == 'subject':
+                s = labels_set.intersection(es_subject)
+                print("S:",s)
+                for meaning in meanings:
+                    if meaning:
+                        temp = meaning.split(':')
+                        my_label, token_idx = temp[1].split('/')
+                        if my_label in s and my_label == s.pop():
+                            main_meaning = meaning
+                        elif my_label in es_object:
+                            token = self.pt_df[self.pt_df['token_idx'] == int(token_idx)]
+                            token_str = token['text'].tolist().pop() + '/' + token['a_pos'].tolist().pop() + ':' + temp[1]
+                            objects = [] if objects == None else objects
+                            objects.append(token_str)
+        else:
+            main_meaning = meanings.pop()
+
+        print("main_meaning, actions, objects:", main_meaning, actions, objects)
+        return main_meaning, actions, objects
+
     def read_parse_dict(self, parse_dict):
         es_dict = {}
         print("1. parse_dict:",parse_dict)
-        for es_type in ['subject','object','action']:
+        for es_type in ['subject','action','object']:
             try:
-                means = []
+                meanings = []
                 for value in parse_dict[es_type]:
                     if type(value) == dict:
                         child_es_dict = self.read_parse_dict(value)
                         print("child_main_es_dict:",child_es_dict)
-                        means.append("child_es_dict")
+                        meanings.append("child_es_dict")
                     else:
-                        means.append(self.get_mean(value))
-            
-                for mean in means:
-                    main_mean = mean
+                        meanings.append(self.get_meaning(value))
+
+                main_meaning, actions, objects = self.reset_parse_dict(es_type, meanings)
+                if actions:
+                    parse_dict['action'] = parse_dict['action'] + actions if 'action' in parse_dict.keys() else actions
+                elif objects:
+                    parse_dict['object'] = parse_dict['object'] + objects if 'object' in parse_dict.keys() else objects
+                print("loop parse dict:",parse_dict)
+
+                #for meaning in meanings:
+                #    print("all meaning:",meaning)
+                #    main_meaning = meaning
 
                 for key in parse_dict.keys():
                     if key.startswith(es_type + "_"):
                         for value in parse_dict[key]:
                             if type(value) == dict:
                                 child_es_dict = self.read_parse_dict(value)
-                                mean, context = self.infer_meaning(child_es_dict)
+                                meaning, context = self.infer_meaning(child_es_dict)
                             else:
-                                mean = self.get_mean(value)
+                                meaning = self.get_meaning(value)
 
                             _, sub_key = key.split("_")
-                            print("es_type, sub_key, mean:", es_type, sub_key, mean)
+                            print("es_type, sub_key, meaning:", es_type, sub_key, meaning)
                             if sub_key == 'neg':
-                                es_dict[es_type + "_neg"] = mean
+                                es_dict[es_type + "_neg"] = meaning
                             elif sub_key == 'modifier':
-                                if main_mean == None:
-                                    main_mean = mean
+                                if main_meaning == None:
+                                    main_meaning = meaning
 
             except KeyError as e:
                 traceback.print_exc()
-                main_mean = None
+                main_meaning = None
 
-            es_dict[es_type] = main_mean
+            es_dict[es_type] = main_meaning
             print("es_dict(loop):",es_dict)
 
         return es_dict
@@ -361,26 +427,59 @@ class ExecutionStructure(object):
         self.parse_dict = parse_dict
         self.user_id = user_id
 
-        sub_context = context = response = "" 
-        
         print("self.parse_dict:\n",self.parse_dict)
         print("self.pt_df:\n",self.pt_df)
 
+        #    user_convo = {
+        #        'context' : None,
+        #        'prev_sao' : {},
+        #        'formatter' : None,
+        #        'request' : None,
+        #        'arg' : {}
+        #    }
+
+        user_convo = self.get_user_convo(user_id)
         es_dict = self.read_parse_dict(self.parse_dict)
         print("final es_dict:",es_dict)
+        print("user convo:",user_convo)
 
         try:
-            es_action = es_dict['action'] if es_dict['action'] else 'do'
-            es_subject = es_dict['subject'] if es_dict['subject'] else 'entity'
+            if user_convo['request']:
+                es_action = user_convo['prev_sao']['action'].split(':')[0]
+                es_subject = user_convo['prev_sao']['subject'].split(':')[0]
+                es_object = es_dict['subject'].split(':')[0]
+            else:
+                es_action = es_dict['action'].split(':')[0] if es_dict['action'] else 'do'
+                es_subject = es_dict['subject'].split(':')[0] + '()' if es_dict['subject'] else 'entity()'
+                es_object = es_dict['object'].split(':')[0] if es_dict['object'] else None
 
-            domain, context, *params = getattr(eval(es_subject), es_action)(es_dict['object'], es_dict)
-            print("Call subject class: {0}, {1}, {2}".format(domain, context, params))
+            if re.match("^([0-9]+)d\(\)$", es_subject):
+                es_subject = "time()"
+            print("es_subject, es_object:",es_subject, es_object)
+            subject_param = es_dict['subject'].split(':')[0] if es_dict['subject'] else None
+            domain, answer, *params = getattr(eval(es_subject), es_action)(es_object, user_convo=user_convo, subject=subject_param)
+            print("Call subject class: {0}, {1}, {2}".format(domain, answer, params))
         except NameError:
-            cls = self.entities[self.entities['means'] == es_dict['subject']]['type'].tolist().pop()
-            domain, context, *params = getattr(eval('cls_' + cls), es_action)(es_dict['object'], es_dict)
-            print("Call subject class: {0}, {1}, {2}".format(domain, context, params))
+            es_subject = es_dict['subject'].split(':')[0]
+            cls = self.entities[self.entities['meanings'] == es_subject]['type'].tolist().pop()
+            domain, answer, *params = getattr(eval('cls_' + cls), es_action)(es_object, user_convo=user_convo, subject=es_subject)
+            print("Call subject class: {0}, {1}, {2}".format(domain, answer, params))
 
-        return domain, context, params
+        request = None
+        if answer.split(' ')[0] == "required":
+            request = " ".join(answer.split(' ')[1:])
+
+        print("params:",params)
+        param = params[0] if len(params) > 0 else {}
+        user_convo = {
+            'context' : domain,
+            'prev_sao' : {'subject':es_subject.replace("()",""), 'action':es_action, 'object':es_object},
+            'formatter' : domain + ' ' + answer,
+            'request' : request,
+            'args' : param
+        }
+
+        return domain, answer, user_convo
 
     def make_formatter(self, domain, context, check_dict):
         validation_value = ''
@@ -397,14 +496,6 @@ class ExecutionStructure(object):
 
         print("formatter:",formatter)
         return formatter
-
-    def set_user_context(self, user_id, domain, context, formatter):
-        self.user_context = {
-            'domain':domain,
-            'context':context,
-            'prev-formatter':formatter
-        }
-        self.save_user_context(user_id, self.user_context)
 
     def check_domain(self, domain, context, user_id):
         results = []

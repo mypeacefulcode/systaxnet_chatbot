@@ -1,4 +1,4 @@
-word,type,means
+word,type,meanings
 가다/Verb,action
 나다/Verb,action
 넘었는데/Verb,action
@@ -19,6 +19,7 @@ word,type,means
 안됬네/Adjective,action,not
 안오네/ADJ,action,late
 안와/NOUN,action,오다
+알려/VERB,action,tell
 알아보고/VERB,action,알아보다
 오나/VERB,action,오다
 오는/VERB,action,오다
@@ -26,6 +27,7 @@ word,type,means
 와/Verb,action,오다
 있는데/ADJ,action,있다
 주다/Verb,action,do
+줘/VERB,action,do
 주세요/VERB,action,do
 하고/AFFIX,action,do
 하고/VERB,action,do
@@ -73,8 +75,16 @@ word,type,means
 파손/NOUN,abstraction,broken
 환불/NOUN,abstraction,refund
 확인/NOUN,abstraction,check
+날씨/NOUN,weather,weather
+비/NOUN,rain,weather
 안녕/NOUN,conversation,greeting
+어때/ADJ,conversation,how
 반가워/NOUN,conversation,greeting
 언제/PRON,time,when
 어제/NOUN,time,"-1d"
+오늘/NOUN,time,"0d"
+내일/NOUN,time,"1d"
+오랜만/NOUN,conversation,longtime
 일주일/NOUN,time,"1w"
+서울/NOUN,area,"seoul"
+부산/NOUN,area,"busan"
