@@ -1,32 +1,25 @@
 ! version = 0.1
 
 // Bot variables
-!var name = chatbot
+!var name = 위메프 채팅 로봇
 
-+ cancel-order begin
-- 주문취소 하시겠습니까?
++ &&cancel-order begin order-id *
+- 네, 고객님. \n
+^ 해당 상품은 \n
+^ 즉시 취소가 가능한 상태입니다.\n
+^ \n
+^ 아래 [주문취소 신청하기] \n
+^ 버튼을 클릭해주세요
 
-+ cancel-order error-exists-order
-- 주문취소할 주문 내역이 없습니다. \n
-^ 무엇을 도와드릴까요?
-
-+ cancel-order error-before-delivery
-- 이미 주문하신 건은 배송중입니다. \n
-^ 환불 하시겠습니까?
-
-+ cancel-order begin cancel
-- 주문취소 신청이 취소 되었습니다. \n
-^ 무엇을 도와드릴까요?
-
-+ cancel-order select-order cancel
-- 주문내역 선택이 취소 되었습니다. \n
-^ 주문취소를 계속 진행하시겠습니까?
-
-+ cancel-order select-order 
-- 주문취소 하시려는 내역을 선택해주세요. \n
-^ 1번 : 청바지 \n
-^ 2번 : 티셔츠
-
-+ cancel-order finish
++ &&cancel-order finish order-id *
 - 주문취소가 완료되었습니다. \n
+^ ◎ 주문취소 정보 \n
+^ - 환불예정금액 : 9,900원 \n
+^ - 환불수단 : 신용카드 \n
+^ - 환불소요일 : 영업일기준 2~4일이내 승인취소 \n
+^ \n
+^ 추가로 문의하실 사항이 있으십니까?
+
++ &&cancel-order cancel order-id *
+- 주문취소가 접수되지 않았습니다. \n
 ^ 무엇을 도와드릴까요?
