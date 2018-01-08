@@ -8,13 +8,13 @@ mongodb_conf = {
 }
 
 rabbitmq_conf = {
-    "hosts":"35.187.194.160",
+    "hosts":"localhost",
     "port":5672,
     "user":"guest",
-    "password":"wmind2017"
+    "password":"guest"
 }
 
 redis_conf = {
-    "hosts":"127.0.0.1",
+    "hosts":"35.189.129.153",
     "port":6379
 }

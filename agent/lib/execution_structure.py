@@ -5,15 +5,14 @@ import pandas as pd
 pd.set_option('display.width', 1000)
 pd.options.mode.chained_assignment = None
 import numpy as np
-import redis, re
+import redis, re, ast 
+from .entities import *
 
 class ExecutionStructure(object):
     def __init__(self, config, redisdb, logger):
         self.logger = logger
         self.config = config
         self.redisdb = redisdb
-
-        self.kinds = ['when','what','how','why']
 
         # Make entities dataframe
         path = self.config['entities_config']['csv_path'] + '/'
@@ -26,53 +25,8 @@ class ExecutionStructure(object):
         csv_file = path + self.config['entities_config']['domain_exp_file']
         self.domain_exp = pd.read_csv(csv_file).fillna("")
 
-    def verify_branchs(self, branchs):
-        check_label = token_idx = None
-        idx = 0
-        new_branchs = []
-        for branch in branchs:
-            label = self.pt_df[self.pt_df['token_idx'] == branch[-1:]]['label'].tolist().pop()
-            if set([label, check_label]) == set(['PRT','SUFF']) and branch[-2:-1] == check_idx:
-                if label == 'PRT':
-                    last_idx = branch[-1:]
-                    use_branch = idx - 1
-                else:
-                    last_idx = branchs[idx-1][-1:]
-                    use_branch = idx
-                new_branchs.pop()
-                branch = branchs[use_branch] + last_idx
-            elif label in ['PRT','SUFF']:
-                check_idx = branch[-2:-1]
-                check_label = label
-            else:
-                token_idx = -1
-                check_label = ""
-
-            new_branchs.append(branch)
-            idx += 1
-
-        return new_branchs
-
-    def read_branchs(self, token_idx, tokens_idx, branchs):
-        token_idx = int(token_idx)
-
-        c_df = self.pt_df.loc[(self.pt_df['head_token_idx'] == token_idx) & (self.pt_df['token_idx'] != token_idx)]
-        rows, _ = c_df.shape
-
-        if rows == 0:
-            return tokens_idx, True
-        else:
-            for idx in c_df['token_idx']:
-                tokens_idx.append(int(idx))
-                _, flag = self.read_branchs(idx, tokens_idx, branchs)
-
-                branch = _[:]
-                if flag:
-                    branchs.append(branch)
-                tokens_idx.pop()
-
-        return branchs, False
-
+        setattr(entity, 'entity_dict', self.entities)
+        
     def analyze_pos(self, analyzer):
         for index, row in self.pt_df.iterrows():
             if row['pos'] == "UNKNOWN":
@@ -93,139 +47,174 @@ class ExecutionStructure(object):
             else:
                 self.pt_df.a_pos[self.pt_df.token_idx == index] = row['pos']
 
-    def read_parse_tree(self, df):
+    def dependency_label_rule(self, entity, my_label, parent_label, brothers_label, depth, parent_es_kind):
+        labels_set = set([my_label] + brothers_label)
+        print("labels_set, my_label, parent_es_kind:", labels_set, my_label, parent_es_kind)
+
+        time_entity = False
+        meaning =  entity['meanings'].tolist()
+        if len(meaning) > 0:
+            if meaning[0].split(',')[0] in ['day']:
+                time_entity = True
+
+        es_kind = None
+
+        es_action = set(['ROOT-VERB','ROOT-PRT','ROOT-ADJ','ADVCL-VERB','ROOT-ADJECTIVE','AUX-VERB','SUFF'])
+        es_subject = set(['ROOT-NOUN','NSUBJ','AUX-NOUN','CCOMP','ADVCL-NOUN','DOBJ','NN'])
+        es_modifier = set(['RCMOD','ADVMOD','ATTR'])
+        es_object = set(['DOBJ','NN'])
+        es_special = set(['NEG', 'NUM'])
+
+        if depth <= 1:
+            for key, labels in [('object',es_object), ('action', es_action), ('subject',es_subject), ('modifier',es_modifier), ('special',es_special)]:
+                s = labels_set.intersection(labels)
+                print("S:",s)
+                if my_label in s and key == 'modifier':
+                    if my_label == 'ATTR' and parent_es_kind == 'action':
+                        es_kind = 'action'
+                    else:
+                        es_kind = key
+                elif len(s) > 0 and my_label == s.pop():
+                    es_kind = key
+                    print("loop es kind:", key)
+        else:
+            print("dept else - my_label, parent_label, parent_es_kind:",my_label, parent_label, parent_es_kind)
+            if my_label == "SUFF" and parent_es_kind == 'subject':
+                es_kind = "subject_suff"
+            elif my_label == "DEP" and parent_es_kind == 'object':
+                es_kind = "object"
+            elif my_label == "NN" and parent_es_kind == "object":
+                es_kind = "object"
+            elif my_label == "NN" and parent_es_kind == "subject":
+                es_kind = "object"
+            elif my_label in ["NN","DOBJ"] and parent_es_kind == "action":
+                es_kind = "subject"
+            elif my_label in es_special:
+                es_kind = "special"
+
+        print("key:",es_kind)
+        return es_kind
+
+    def get_es_kind(self, token, parent_label, brothers_label, depth, parent_es_kind):
+        print("------------------------ sub begin ---------------------------")
+        label = token['label'].tolist().pop()
+        word = token['text'].tolist().pop()
+        pos = token['a_pos'].tolist().pop()
+        e_key = word + "/" + pos
+        print("e_key:",e_key)
+        e = self.entities[self.entities['word'] == e_key]
+
+        es_kind = self.dependency_label_rule(e, label, parent_label, brothers_label, depth, parent_es_kind)
+        print("------------------------ sub end ---------------------------")
+
+        return_str = e_key + ":" + label + "/" + str(token['token_idx'].tolist().pop())
+        return es_kind, return_str
+
+    def merge_es_dict(self, es_kind, child_label, parse_dict, child_parse_dict):
+
+        for child_es_kind in child_parse_dict.keys():
+            print("child es kind key:", child_es_kind)
+            print("(L)parse dict:",parse_dict)
+            print("(L)Child parse dict:",child_parse_dict)
+            print("(L)Child es kind:",child_es_kind)
+            if child_label.split('-')[0] in ['ADVCL','RCMOD','CCOMP']:
+                if es_kind + '_modifier' not in parse_dict.keys():
+                    parse_dict[es_kind + '_modifier'] = []
+                parse_dict[es_kind + '_modifier'] += child_parse_dict[child_es_kind]
+                parse_dict[es_kind + '_modifier'].append(child_parse_dict[child_es_kind])
+            elif child_es_kind in ['modifier']:
+                if es_kind + '_modifier' not in parse_dict.keys():
+                    parse_dict[es_kind + '_modifier'] = []
+                parse_dict[es_kind + '_modifier'] += child_parse_dict[child_es_kind]
+            elif child_es_kind in ['subject']:
+                if child_es_kind  not in parse_dict.keys():
+                    parse_dict[child_es_kind] = []
+                parse_dict[child_es_kind] += child_parse_dict[child_es_kind]
+            elif child_es_kind in ['special']:
+                if child_label in ['NEG']:
+                    if es_kind + '_neg' not in parse_dict.keys():
+                        parse_dict[es_kind + '_neg'] = []
+                    parse_dict[es_kind + '_neg'] += child_parse_dict[child_es_kind]
+                elif child_label in ['NUM']:
+                    if es_kind + '_num' not in parse_dict.keys():
+                        parse_dict[es_kind + '_num'] = []
+                    parse_dict[es_kind + '_num'] += child_parse_dict[child_es_kind]
+            elif es_kind == 'object' and child_es_kind in ['object']:
+                parse_dict[es_kind] += child_parse_dict[child_es_kind]
+            else:
+                parse_dict.update(child_parse_dict)
+
+        return parse_dict
+
+    def read_parse_tree(self, idx, parent_es_kind = None, brothers_label = [], depth = 0):
+
+        token = self.pt_df[self.pt_df['token_idx'] == idx]
+        label = token['label'].tolist().pop()
+        pos = token['a_pos'].tolist().pop()
+
+        depth = 0 if label.split('-')[0] in ['ROOT','ADVCL','RCMOD','CCOMP'] else depth + 1
+
+        parse_dict = {}
+        es_kind, e_key = self.get_es_kind(token, label, brothers_label, depth, parent_es_kind)
+        print("es_kind:",es_kind)
+        if es_kind:
+            if es_kind == "modifier":
+                if pos in ["NOUN"]:
+                    es_kind = "subject"
+                elif pos in ["VERB"]:
+                    es_kind = "action"
+
+            if es_kind not in parse_dict.keys():
+                parse_dict[es_kind] = []
+            parse_dict[es_kind].append(e_key)
+
+            print("es_kind, es_kye:",es_kind, e_key)
+
+            child_idxs = self.pt_df[(self.pt_df['head_token_idx'] == idx) & (self.pt_df['token_idx'] != idx)]['token_idx'].tolist()
+            child_labels = self.pt_df[(self.pt_df['head_token_idx'] == idx) & (self.pt_df['token_idx'] != idx)]['label'].tolist()
+            childs = zip(child_idxs, child_labels)
+
+            print("self_idx:",idx)
+            print("child_idxs:",child_idxs)
+            for idx, child_label in childs:
+                child_parse_dict = self.read_parse_tree(idx, es_kind, child_labels, depth)
+                soa_cnt = len(set([key.split('_')[0] for key in child_parse_dict.keys()]))
+                print("Child parse dict(depth:%s,soa_cnt:%s):%s"%(depth,soa_cnt,child_parse_dict))
+                if soa_cnt > 1 and depth > 0:
+                    if es_kind + '_modifier' not in parse_dict.keys():
+                        parse_dict[es_kind + '_modifier'] = []
+                    parse_dict[es_kind + '_modifier'].append(child_parse_dict)
+                else:
+                    parse_dict = self.merge_es_dict(es_kind, child_label, parse_dict, child_parse_dict)
+
+            print("(L)Merge parse dict:",parse_dict)
+        return parse_dict
+
+    def make_execution_structure(self, df, analyzer):
         self.pt_df = df
         self.pt_df['a_pos'] = pd.Series(index=self.pt_df.index)
         self.pt_df['exec_pos'] = pd.Series(index=self.pt_df.index)
         self.pt_df.to_csv('parse_tree.csv', index=False)
 
-        self.es_dict = {}
-        for kind in self.kinds:
-            self.es_dict[kind] = {}
-            self.es_dict[kind] = {
-                'depth':-1,
-                'label':None,
-                'tokens':[],
-                'head_token_idx':-1,
-                'words':None
-            }
-        self.es_df = pd.DataFrame(columns=['kind','obj_entities','mind_entities','obj_means','mind_means','action','branch','morphs','origin'])
+        self.analyze_pos(analyzer)
 
-        root_idxs = self.pt_df.loc[self.pt_df['label'] == 'ROOT']['token_idx'].tolist()
-        branchs = []
-        for root_idx in root_idxs:
-            r_branchs, _ = self.read_branchs(root_idx, [int(root_idx)], [])
-            if type(r_branchs[0]) == int:
-                r_branchs = [r_branchs]
-            branchs += r_branchs
+        root_idx = self.pt_df.loc[self.pt_df['label'] == 'ROOT']['token_idx'].tolist().pop()
 
-        print("branchs:",branchs)
-        branchs = self.verify_branchs(branchs)
-        print("verify branchs:",branchs)
-        br_df = pd.DataFrame(branchs).fillna(-1)
-        br_df = br_df.astype(int)
+        df = self.pt_df.loc[self.pt_df['label'].isin(['ROOT','ADVCL','AUX'])]
+        tokens = zip(df['token_idx'].tolist(), df['label'].tolist(), df['a_pos'].tolist())
 
-        rows, cols = br_df.shape
-        prev_dp = cols
+        for idx, label, pos in tokens:
+            self.pt_df.label[self.pt_df.token_idx == idx] = label + '-' + pos.upper().strip()
 
-        p_dependency = pd.DataFrame(columns=['label','head_token_idx','idxs'])
-        self.what_stack = []
-        for r_idx in range(rows):
-            dp = self.get_diff_position(br_df, r_idx, r_idx+1)
-            cul_cols = [i for i in range(dp,cols)]
-    
-            t = br_df[cul_cols][r_idx:r_idx+1].values[0][::-1]
-            t = t[np.where(t>-1)]
+        print("self.pt_df:\n",self.pt_df)
+        parse_dict = self.read_parse_tree(root_idx)
+        print("parse_dict:",parse_dict)
 
-            idxs, label, head_token_idx  = self.get_branch_info(self.pt_df.loc[t], dp)
+        return parse_dict
 
-            if prev_dp == dp:
-                pass
-            elif prev_dp > dp or dp == 0:
-                idxs = self.concat_branch(p_dependency, idxs)
-                p_dependency.drop(p_dependency.index, inplace=True)
-            elif prev_dp < dp:
-                pass
-
-            if label in ['DOBJ','NSUBJ','NSUBJPASS']:
-                self.set_es('what', dp, label, idxs, head_token_idx)
-            elif label in ['ADVCL']:
-                self.set_es('why', dp, label, idxs, head_token_idx)
-            elif label == 'ROOT':
-                self.set_es('how', dp, label, idxs, head_token_idx)
-            else:
-                p_dependency.loc[len(p_dependency.index)] = [label, head_token_idx, idxs]
-
-            prev_dp = dp
-
-        #if self.es_dict['what']['depth'] == -1:
-        #    self.get_what()
-
-        return self.es_dict
-
-    def concat_branch(self, df, idxs):
-        r_idxs = []
-        for index, row in df.iterrows():
-            r_idxs += row['idxs']
-        
-        r_idxs += idxs[:]
-        return r_idxs
-
-    def get_what(self):
-        print('what_stack:',self.what_stack)
-        if len(self.what_stack) > 0:
-            for idxs, label, head_token_idx, depth in self.what_stack:
-                f_idxs = idxs
-                f_label = label
-                f_head_token_idx = head_token_idx
-                f_depth = depth
-
-            self.set_es('what', f_depth, f_label, f_idxs, f_head_token_idx)
-
-    def get_diff_position(self, br_df, idx1, idx2):
-        diff_p = 0
-        _, cols = br_df.shape
-    
-        for c_idx in range(cols-1, -1, -1): 
-            if br_df[c_idx][idx1:idx1+1].values != br_df[c_idx][idx2:idx2+1].values:
-                diff_p = c_idx
-                
-        return diff_p
-
-    def set_es(self, kind, depth, label, idxs, head_token_idx):
-        if self.es_dict[kind]['depth'] > 0 and self.es_dict[kind]['depth'] > depth:
-            if kind == "why":
-                if self.es_dict[kind]['head_token_idx'] in idxs:
-                    idxs = self.es_dict[kind]['tokens'] + idxs[:]
-
-        self.es_dict[kind]['depth'] = depth
-        self.es_dict[kind]['label'] = label
-        self.es_dict[kind]['tokens'] = idxs[:]
-        self.es_dict[kind]['head_token_idx'] = head_token_idx
-
-        r = [ row['text'] if row['label'] in ['SUFF', 'PRT'] else ' ' + row['text'] \
-                    for index, row in self.pt_df.loc[idxs].iterrows()]
-        self.es_dict[kind]['words'] = ''.join(r)
-
-        return True
-
-    def get_branch_info(self, df, depth):
-        idxs = []
-
-        for index, row in df[::-1].iterrows():
-            idxs.append(row['token_idx'])
-        
-            if len(idxs) <= 1:
-                label = row['label']
-                head_token_idx = row['head_token_idx']
-
-            if row['label'] in ['DOBJ']:
-                self.what_stack.append((idxs[:], label, head_token_idx, depth))
-
-        return idxs, label, head_token_idx
-
+    """
     def verify_answer(self, exec_dict, context, sub_context):
-        answer = exec_dict['action_entity'] + exec_dict['execution_entity']
+        answer = exec_dict['action_entity'] + exec_dict['subject_entity']
         if answer == ['아니다']:
             r_value = False
         elif answer == ['맞다']:
@@ -255,55 +244,16 @@ class ExecutionStructure(object):
                 next_context = 'finish'
 
         return next_context
+    """
 
-    def read_dependency(self, branch):
-        parse_dict = {
-            'what':[],
-            'how':[],
-            'when':[],
-            'why':[]
-        }
-        prev_label = ''
-        dependency = []
-
-        try:
-            print("read dependency -> branch:",branch)
-            for idx in branch[::-1]:
-                df = self.pt_df[self.pt_df['token_idx'] == idx]
-                label = df['label'].tolist().pop()
-                head_token_idx = df['head_token_idx'].tolist().pop()
-                head_df = self.pt_df[self.pt_df['token_idx'] == head_token_idx]
-                head_label = head_df['label'].tolist().pop()
-
-                label_type = self.parse_label[self.parse_label['label'] == label]['type'].tolist().pop()
-                if label_type != 'pass':
-                    if label in ['DEP','RCMOD']:
-                        dependency.insert(0,idx)
-                    else:
-                        if len(dependency) > 0:
-                            dependency.insert(0,idx)
-                            parse_dict[label_type].insert(0,dependency)
-                            dependency = []
-                        else:
-                            parse_dict[label_type].insert(0,idx)
-                prev_label = label
-        except IndexError:
-            traceback.print_exc()
-            print("Unknown parse label:", label)
-
-        if len(dependency) > 0:
-            parse_dict[label_type] = [parse_dict[label_type] + dependency]
-
-        return parse_dict
-
-    def verify_context(self, context_df, exec_dict):
+    def verify_domain(self, domain_df, es_dict):
         p = re.compile('.*\+')
-        for index, row in context_df.iterrows():
+        for index, row in domain_df.iterrows():
             check_flag = True
-            for key in ['execution','action','purpose','reason','time']:
+            for key in ['subject','object','action']:
                 items = row[key].split(',')
                 for item in items:
-                    if p.match(item) and item[:-1] not in exec_dict[key + '_entity']:
+                    if p.match(item) and (item[:-1] not in es_dict[key]):
                         check_flag = False
 
             if check_flag:
@@ -311,286 +261,227 @@ class ExecutionStructure(object):
 
         return False, None
 
-    def read_context(self, user_id, exec_dict):
-        context = ""
+    def get_user_convo(self, user_id):
+        name = "CONVO-" + user_id
+        user_convo = self.redisdb.hgetall(name)
 
-        exec_pattern = '^(?=.*' + ')(?=.*'.join(exec_dict['execution_entity']) + ').*$' if exec_dict['execution_entity'] != [] else ''
-        act_pattern = '^(?=.*' + ')(?=.*'.join(exec_dict['action_entity']) + ').*$' if exec_dict['action_entity'] != [] else ''
-        pur_pattern = '^(?=.*' + ')(?=.*'.join(exec_dict['purpose_entity']) + ').*$' if exec_dict['purpose_entity'] != [] else ''
-        rea_pattern = '^(?=.*' + ')(?=.*'.join(exec_dict['reason_entity']) + ').*$' if exec_dict['reason_entity'] != [] else ''
-
-        context_df = self.domain_exp[ self.domain_exp.execution.str.contains(exec_pattern) & self.domain_exp.action.str.contains(act_pattern) ]
-        row, _ = context_df.shape
-        if row == 0:
-            context_df = self.domain_exp[ self.domain_exp.execution.str.contains(exec_pattern) & self.domain_exp.action.str.contains(act_pattern) & \
-                                         self.domain_exp.purpose.str.contains(pur_pattern) & self.domain_exp.reason.str.contains(rea_pattern) ]
-
-        print("pattern:",exec_pattern,act_pattern,pur_pattern,rea_pattern)
-        print("context_df:\n",context_df)
-        row, _ = context_df.shape
-        domain_row, _ = self.domain_exp.shape
-
-        if row == domain_row:
-            print("Check domain exp!")
-        elif row == 0:
-            print("Check domain exp!")
-        else:
-            check_flag, context_row = self.verify_context(context_df, exec_dict)
-            if check_flag:
-                context = context_row['domain']
-
-        print("context :",context )
-        self.get_status(user_id)
-
-        response = sub_context = ""
-
-        if context != "":
-            if self.user_context['sub-context'] in ['begin','unknown']:
-                sub_context = "begin"
-            else:
-                sub_context = "unknown"
-        elif self.user_context['context'] != "":
-            context = self.user_context['context']
-            sub_context = self.user_context['sub-context']
-
-            flag = self.verify_answer(exec_dict, context, sub_context)
-            if flag == False:
-                response = 'cancel'
-            elif flag == True:
-                next_context = self.get_next_context(context, sub_context)
-                sub_context = next_context
-            else:
-                sub_context = 'unknown'
-
-        print("sub_cotext:",sub_context)
-        print("response:",response)
-        print("user_context:",self.user_context)
-
-        return context , sub_context, response
-
-    def get_status(self, user_id):
-        name = "CONTEXT-" + user_id
-        self.user_context = self.redisdb.hgetall(name)
-
-        if self.user_context == {}:
-            self.user_context = {
-                    'context':'',
-                    'sub-context':'',
-                    'prev-formatter':''
+        if user_convo== {}:
+            user_convo = {
+                'context' : None,
+                'prev_sao' : {},
+                'formatter' : None,
+                'request' : None,
+                'args' : {}
             }
+        else:
+            user_convo['prev_sao'] = ast.literal_eval(user_convo['prev_sao'])
+            user_convo['args'] = ast.literal_eval(user_convo['args'])
+            if user_convo['request'] == 'None':
+                user_convo['request'] = None
 
-    def save_user_context(self, user_id, context, response):
-        name = "CONTEXT-" + user_id
+        return user_convo
 
-        if context['sub-context'] == 'begin' and response == 'cancel':
-            context['context'] = ''
-            context['sub-context'] = ''
-        elif response == 'cancel':
-            context['sub-context'] = 'begin'
+    def save_user_context(self, user_id, user_convo):
+        name = "CONVO-" + user_id
+        self.redisdb.hmset(name, user_convo)
 
-        self.redisdb.hmset(name, context)
+    def get_meaning(self, ekey):
+        word = ekey.split(':')[0]
+        print("word:",word,ekey)
+        e = self.entities[self.entities['word'] == word]
+        row, _ = e.shape
+        if row == 1:
+            meaning = e['meanings'].tolist().pop() + ':' + ekey.split(':')[1]
+        else:
+            meaning = None
 
-    def make_execution_structure(self, idxs, exec_dict, analyzer, kind):
-        """
-        exec_dict = {
-            "execution_entity":"",
-            "action_entity":"",
-            "purpose_entity":"",
-            "reason_entity":"",
-            "time_entity":""
-        }
-        """
-        print("es_idxs:",idxs)
-        print("kind:",kind)
-        prev_label = ""
-        child_entity = {}
-        self.pt_df = self.pt_df.fillna('')
+        return meaning 
 
-        for idx in idxs:
-            if type(idx) == list:
-                for i in idx[::-1]:
-                    t_df = self.pt_df[self.pt_df['token_idx']==i]
-                    row = t_df.ix[t_df.index[0]]
-                    token = row['text'] + "/" + row['a_pos']
+    def infer_meaning(self, es_dict):
+        
+        subject_pattern = '^(?=.*' + es_dict['subject'] + ').*$' if es_dict['subject'] else ''
+        object_pattern = '^(?=.*' + es_dict['object'] + ').*$' if es_dict['object'] else ''
+        action_pattern = '^(?=.*' + es_dict['action'] + ').*$' if es_dict['action'] else ''
 
-                    e = self.entities[self.entities['word'] == token]
-                    e = e.fillna('None')
-                    print("E:",e)
-                    if e.size == 0:
-                        continue
+        domain_df = self.domain_exp[ self.domain_exp.subject.str.contains(subject_pattern) & \
+                                     self.domain_exp.object.str.contains(object_pattern) & \
+                                     self.domain_exp.action.str.contains(action_pattern) ]
 
-                    e = e.ix[e.index[0]]
-                    mean = e['means'].split(',')
-                    etype = e['type']
+        print("pattern:",subject_pattern,object_pattern,action_pattern)
+        print("domain_df:\n",domain_df)
 
-                    if set(mean).issubset(set(self.config['special_obj'])):
-                        p_e = e
-                        p_mean = mean
-                        p_etype = etype
-                    elif set(mean).issubset(set(self.config['special_act'])):
-                        p_e = e
-                        p_mean = mean
-                        p_etype = etype
-                e_idx = i
-                e = e if p_e.size == 0 else p_e
-                mean = mean if p_e.size == 0 else p_mean
-                etype = etype if p_e.size == 0 else p_etype
-            else:
-                e_idx = idx
+        row, _ = domain_df.shape
 
-                t_df = self.pt_df[self.pt_df['token_idx']==e_idx]
-                row = t_df.ix[t_df.index[0]]
-                token = row['text'] + "/" + row['a_pos']
+        domain = None
+        if row == 1:
+            check_flag, domain_row = self.verify_domain(domain_df, es_dict)
+            if check_flag:
+                domain = domain_row['domain']
+        else:
+            print("Check domain exp!")
 
-                e = self.entities[self.entities['word'] == token]
-                e = e.fillna('None')
+        context = 'begin'
+        if domain == 'cancel':
+            domain = domain_row['object']
+            context = 'cancel'
+        elif domain:
+            for es_type in es_dict.keys():
+                keys = es_type.split("_")
+                if len(keys) > 1:
+                    if keys[1] == 'neg':
+                        context = 'cancel'
 
-                if e.size == 0:
-                    continue
+        print("domain, context:",domain, context)
 
-                e = e.ix[e.index[0]]
-                mean = e['means'].split(',')
-                etype = e['type']
+        return domain, context
 
-            if e.size > 0:
-                label = self.pt_df[self.pt_df['token_idx'] == e_idx]['label'].tolist().pop()
-                pos = self.pt_df[self.pt_df['token_idx'] == e_idx]['pos'].tolist().pop()
+    def reset_parse_dict(self, es_type, meanings):
+        es_subject = set(['ROOT-NOUN','NSUBJ','AUX','CCOMP','ADVCL-NOUN','NN'])
+        es_object = set(['ADVMOD'])
 
-                head_exec_pos = ""
-                head_label = ""
-                if label != "ROOT":
-                    head_token_idx = self.pt_df[self.pt_df['token_idx'] == e_idx]['head_token_idx'].tolist().pop()
-                    head_label = self.pt_df[self.pt_df['token_idx'] == head_token_idx]['label'].tolist().pop()
-                    head_pos = self.pt_df[self.pt_df['token_idx'] == head_token_idx]['a_pos'].tolist().pop()
-                    head_exec_pos = self.pt_df[self.pt_df['token_idx'] == head_token_idx]['exec_pos'].tolist().pop()
-                else:
-                    root_label = self.pt_df[self.pt_df['token_idx'] == e_idx]['label'].tolist().pop()
-                    root_pos = self.pt_df[self.pt_df['token_idx'] == e_idx]['a_pos'].tolist().pop()
+        actions = objects = main_meaning =  None
+        if len(meanings) > 1:
+            labels_set = []
+            for meaning in meanings:
+                if meaning:
+                    print("meaning:",meaning)
+                    temp = meaning.split(':')
+                    print("temp, temp[1]:",temp, temp[1])
+                    label, token_idx = temp[1].split('/')
+                    labels_set.append(label)
+            labels_set = set(labels_set)
 
-                exec_pos = ""
-                child_means = child_entity[e_idx] if e_idx in child_entity.keys() else []
-                mean = child_means + mean
-                print("child_entity:",child_entity)
-                print("child_means:",child_means)
-                print("mean:",mean)
-                print("label:",label)
-                print("head_label:",head_label)
-                if label == 'ROOT':
-                    """
-                    if 'need-to-obj' in e['attr']:
-                        exec_dict['action_entity'] = mean + exec_dict['action_entity']
-                        exec_pos = "action_entity"
+            if es_type == 'subject':
+                s = labels_set.intersection(es_subject)
+                print("S:",s)
+                for meaning in meanings:
+                    if meaning:
+                        temp = meaning.split(':')
+                        my_label, token_idx = temp[1].split('/')
+                        if my_label in s and my_label == s.pop():
+                            main_meaning = meaning
+                        elif my_label in es_object:
+                            token = self.pt_df[self.pt_df['token_idx'] == int(token_idx)]
+                            token_str = token['text'].tolist().pop() + '/' + token['a_pos'].tolist().pop() + ':' + temp[1]
+                            objects = [] if objects == None else objects
+                            objects.append(token_str)
+        else:
+            main_meaning = meanings.pop()
+
+        print("main_meaning, actions, objects:", main_meaning, actions, objects)
+        return main_meaning, actions, objects
+
+    def read_parse_dict(self, parse_dict):
+        es_dict = {}
+        print("1. parse_dict:",parse_dict)
+        for es_type in ['subject','action','object']:
+            try:
+                meanings = []
+                for value in parse_dict[es_type]:
+                    if type(value) == dict:
+                        child_es_dict = self.read_parse_dict(value)
+                        print("child_main_es_dict:",child_es_dict)
+                        meanings.append("child_es_dict")
                     else:
-                        if root_pos.upper() in ["VERB","ADJ"]:
-                            exec_dict['action_entity'] += mean
-                            exec_pos = "action_entity"
-                        else:
-                            exec_dict['execution_entity'] += mean
-                            exec_pos = "execution_entity"
-                    """
-                    if root_pos.upper() in ["VERB","ADJ"]:
-                        exec_dict['action_entity'] += mean
-                        exec_pos = "action_entity"
-                    else:
-                        exec_dict['execution_entity'] += mean
-                        exec_pos = "execution_entity"
-                elif label == 'SUFF':
-                    if head_label == 'ROOT':
-                        exec_dict['action_entity'] += mean
-                        exec_pos = "action_entity"
-                    elif head_label == 'AUX' and head_exec_pos in ["execution_entity", "action_entity"]:
-                        #exec_dict['action_entity'] = mean + exec_dict['action_entity']
-                        exec_dict['action_entity'] += mean 
-                        exec_pos = "action_entity"
-                    elif head_label in ['ADVCL'] and kind == "why":
-                        exec_dict['reason_entity'] += mean
-                        exec_pos = "reason_entity"
-                elif label in ['NN','NSUBJ','DOBJ']:
-                    if head_label == 'ROOT':
-                        exec_dict['execution_entity'] = mean + exec_dict['execution_entity']
-                        exec_pos = "execution_entity"
-                    elif head_label in ['NN','NSUBJ','DOBJ']:
-                        if head_exec_pos == "":
-                            if head_token_idx in child_entity.keys():
-                                child_entity[head_token_idx] += mean
+                        meanings.append(self.get_meaning(value))
+
+                main_meaning, actions, objects = self.reset_parse_dict(es_type, meanings)
+                if actions:
+                    parse_dict['action'] = parse_dict['action'] + actions if 'action' in parse_dict.keys() else actions
+                elif objects:
+                    parse_dict['object'] = parse_dict['object'] + objects if 'object' in parse_dict.keys() else objects
+                print("loop parse dict:",parse_dict)
+
+                #for meaning in meanings:
+                #    print("all meaning:",meaning)
+                #    main_meaning = meaning
+
+                for key in parse_dict.keys():
+                    if key.startswith(es_type + "_"):
+                        for value in parse_dict[key]:
+                            if type(value) == dict:
+                                child_es_dict = self.read_parse_dict(value)
+                                meaning, context = self.infer_meaning(child_es_dict)
                             else:
-                                child_entity[head_token_idx] = mean
-                        else:
-                            exec_dict[head_exec_pos] = mean + exec_dict['execution_entity']
-                            exec_pos = head_exec_pos
-                    else:
-                        exec_dict['purpose_entity'] += mean
-                        exec_pos = "purpose_entity"
-                elif label in ['AUX']:
-                    if head_label == 'ROOT' and head_pos in ['VERB','ADJ']:
-                        exec_dict['action_entity'] = mean + exec_dict['action_entity']
-                        exec_pos = "action_entity"
-                    elif head_label == 'ROOT':
-                        exec_dict['execution_entity'] = mean + exec_dict['execution_entity']
-                        exec_pos = "execution_entity"
-                elif label in ['ADVMOD','ADVCL']:
-                    if etype == "time":
-                        exec_dict['time_entity'] = mean + exec_dict['time_entity']
+                                meaning = self.get_meaning(value)
 
-                    if kind == "why":
-                        exec_dict['reason_entity'] = mean + exec_dict['reason_entity']
-                        exec_pos = "reason_entity"
-                else:
-                    print("++++Pass label++++\n",label)
+                            _, sub_key = key.split("_")
+                            print("es_type, sub_key, meaning:", es_type, sub_key, meaning)
+                            if sub_key == 'neg':
+                                es_dict[es_type + "_neg"] = meaning
+                            elif sub_key == 'modifier':
+                                if main_meaning == None:
+                                    main_meaning = meaning
 
-                self.pt_df.exec_pos[self.pt_df.token_idx == e_idx] = exec_pos
+            except KeyError as e:
+                traceback.print_exc()
+                main_meaning = None
 
-        return exec_dict
+            es_dict[es_type] = main_meaning
+            print("es_dict(loop):",es_dict)
 
-    def read_intent(self, es_dict, user_id, analyzer):
-        self.es_dict = es_dict
+        return es_dict
+
+
+    def read_intent(self, parse_dict, user_id):
+        self.parse_dict = parse_dict
         self.user_id = user_id
 
-        sub_context = context = response = "" 
-        
-        exec_dict = {
-            "execution_entity":[],
-            "action_entity":[],
-            "purpose_entity":[],
-            "reason_entity":[],
-            "time_entity":[]
-        }
-
-        self.analyze_pos(analyzer)
-
-        print("self.es_dict:\n",self.es_dict)
+        print("self.parse_dict:\n",self.parse_dict)
         print("self.pt_df:\n",self.pt_df)
 
-        branch = es_dict['how']['tokens']
-        parse_dict = self.read_dependency(branch)
-        print(parse_dict)
-        for key, value in parse_dict.items():
-            if key in ['how','what','why']:
-                exec_dict = self.make_execution_structure(value, exec_dict, analyzer, 'how')
-        print(exec_dict)
+        #    user_convo = {
+        #        'context' : None,
+        #        'prev_sao' : {},
+        #        'formatter' : None,
+        #        'request' : None,
+        #        'arg' : {}
+        #    }
 
-        branch = es_dict['what']['tokens']
-        parse_dict = self.read_dependency(branch)
-        print(parse_dict)
-        for key, value in parse_dict.items():
-            if key in ['how','what','why']:
-                exec_dict = self.make_execution_structure(value, exec_dict, analyzer, 'what')
+        user_convo = self.get_user_convo(user_id)
+        es_dict = self.read_parse_dict(self.parse_dict)
+        print("final es_dict:",es_dict)
+        print("user convo:",user_convo)
 
-        branch = es_dict['why']['tokens']
-        parse_dict = self.read_dependency(branch)
-        print(parse_dict)
-        for key, value in parse_dict.items():
-            if key in ['why','how']:
-                exec_dict = self.make_execution_structure(value, exec_dict, analyzer, 'why')
+        try:
+            if user_convo['request']:
+                es_action = user_convo['prev_sao']['action'].split(':')[0]
+                es_subject = user_convo['prev_sao']['subject'].split(':')[0]
+                es_object = es_dict['subject'].split(':')[0]
+            else:
+                es_action = es_dict['action'].split(':')[0] if es_dict['action'] else 'do'
+                es_subject = es_dict['subject'].split(':')[0] + '()' if es_dict['subject'] else 'entity()'
+                es_object = es_dict['object'].split(':')[0] if es_dict['object'] else None
 
-        print(exec_dict)
-        self.context, self.sub_context, response  = self.read_context(user_id, exec_dict)
+            if re.match("^([0-9]+)d\(\)$", es_subject):
+                es_subject = "time()"
+            print("es_subject, es_object:",es_subject, es_object)
+            subject_param = es_dict['subject'].split(':')[0] if es_dict['subject'] else None
+            domain, answer, *params = getattr(eval(es_subject), es_action)(es_object, user_convo=user_convo, subject=subject_param)
+            print("Call subject class: {0}, {1}, {2}".format(domain, answer, params))
+        except NameError:
+            es_subject = es_dict['subject'].split(':')[0]
+            cls = self.entities[self.entities['meanings'] == es_subject]['type'].tolist().pop()
+            domain, answer, *params = getattr(eval('cls_' + cls), es_action)(es_object, user_convo=user_convo, subject=es_subject)
+            print("Call subject class: {0}, {1}, {2}".format(domain, answer, params))
 
-        print("last context: {}, {}".format(self.context, self.sub_context))
+        request = None
+        if answer.split(' ')[0] == "required":
+            request = " ".join(answer.split(' ')[1:])
 
-        return self.context, self.sub_context, response
+        print("params:",params)
+        param = params[0] if len(params) > 0 else {}
+        user_convo = {
+            'context' : domain,
+            'prev_sao' : {'subject':es_subject.replace("()",""), 'action':es_action, 'object':es_object},
+            'formatter' : domain + ' ' + answer,
+            'request' : request,
+            'args' : param
+        }
 
-    def make_formatter(self, context, sub_context, response, check_dict):
+        return domain, answer, user_convo
+
+    def make_formatter(self, domain, context, check_dict):
         validation_value = ''
         for result in check_dict['results']:
             condition, value = list(iter(result.items()))[0]
@@ -599,27 +490,18 @@ class ExecutionStructure(object):
                 break
 
         if validation_value != '':
-            formatter = ' '.join([context, validation_value]) 
+            formatter = ' '.join([domain, validation_value]) 
         else:
-            formatter = ' '.join([context, sub_context, response]) 
+            formatter = ' '.join([domain, context]) 
 
         print("formatter:",formatter)
         return formatter
 
-    def set_user_context(self, user_id, context, sub_context, response, formatter):
-        self.user_context = {
-            'context':context,
-            'sub-context':sub_context,
-            'prev-formatter':formatter
-        }
-        self.save_user_context(user_id, self.user_context, response)
-
-    def check_domain(self, context, sub_context, user_id):
+    def check_domain(self, domain, context, user_id):
         results = []
-        if context != '':
-            for condition in self.config['context'][context]['conditions']:
-                results.append({condition:getattr(self, condition)(context, sub_context)})
-            
+        if domain != '':
+            for condition in self.config['context'][domain]['conditions']:
+                results.append({condition:getattr(self, condition)(domain, context)})
         check_dict = {
             'results' : results
         }

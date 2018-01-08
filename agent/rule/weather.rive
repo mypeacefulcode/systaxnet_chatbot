@@ -1,0 +1,7 @@
+! version = 0.1
+
++ weather required area
+- 어느 지역의 날씨가 궁금하신가요?
+
++ weather answer *
+- <star1>
