@@ -3,6 +3,7 @@
 import sys, traceback
 import pandas as pd
 import googleapiclient.discovery
+import itertools
 
 class Syntaxnet(object):
     def __init__(self, logger):
@@ -98,3 +99,54 @@ class Syntaxnet(object):
         df = self.verify_parse_tree(df)
 
         return df
+
+    def verify_segmentation(self, response, sentence, verify_dict):
+        prev_word = segment_str = ''
+        prev_offset = 0
+        word_list = []
+        loop_cnt = 0
+        last_loop = False
+        for token in response['tokens']:
+            loop_cnt += 1
+            pos = token['partOfSpeech']['tag']
+            word = token['text']['content']
+            offset = token['text']['beginOffset']
+
+            if loop_cnt == len(response['tokens']):
+                word_list.append(word)
+                last_loop = True
+
+            if prev_offset + len(prev_word) != offset or last_loop:
+                x = start_i = 0
+                word_idxs = [i for i in range(len(word_list))]
+                for r in [3,2]:
+                    for i in range(start_i, len(word_list) - r + 1):
+                        idx = i + x
+                        s_word = ''.join(word_list[idx:idx+r])
+
+                        df = verify_dict.loc[verify_dict['word'] == s_word]
+                        row, _ = df.shape
+
+                        if row == 1:
+                            for sub_i in range(idx,idx+r):
+                                word_idxs[sub_i] = idx
+
+                            x = idx + r
+                            start_i = x
+
+                morphs = ''
+                prev_idx = loop_idx = 0
+                for idx in word_idxs:
+                    if prev_idx != idx:
+                        morphs += ' '
+                    morphs += str(word_list[loop_idx])
+                    prev_idx = idx
+                    loop_idx += 1
+
+                segment_str += ' ' + morphs
+                word_list = []
+
+            word_list.append(word)
+            prev_offset = offset + len(word)
+
+        return segment_str

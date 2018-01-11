@@ -1,6 +1,4 @@
 head_token_idx,label,pos,text,token_idx,a_pos,exec_pos
-1,NN,UNKNOWN,내,0,,
-2,NN,UNKNOWN,일,1,,
-3,NSUBJ,NOUN,날씨,2,,
-3,ROOT,ADJ,어때,3,,
-3,P,PUNCT,?,4,,
+2,AUX,NOUN,환불,0,,
+0,SUFF,AFFIX,해,1,,
+2,ROOT,VERB,주세요,2,,

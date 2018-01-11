@@ -3,7 +3,7 @@ zk_server_2 = "10.146.0.4"
 zk_server_3 = "10.146.0.2"
 
 mongodb_conf = {
-    "hosts":"10.146.0.6",
+    "hosts":"10.146.0.3",
     "port":27017
 }
 

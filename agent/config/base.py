@@ -24,6 +24,7 @@ ES_CONFIG = {
         'csv_entities_file':'entities.csv',
         'parse_label_file':'parse_label.csv',
         'domain_exp_file':'domain_expression.csv',
+        'verify_dict_file':'verify_dictionary.csv',
     },
     # Context 
     # [환불, 주문취소, 배송, 기타]

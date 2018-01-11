@@ -25,6 +25,9 @@ class ExecutionStructure(object):
         csv_file = path + self.config['entities_config']['domain_exp_file']
         self.domain_exp = pd.read_csv(csv_file).fillna("")
 
+        csv_file = path + self.config['entities_config']['verify_dict_file']
+        self.verify_dict = pd.read_csv(csv_file).fillna("")
+
         setattr(entity, 'entity_dict', self.entities)
         
     def analyze_pos(self, analyzer):
@@ -42,7 +45,7 @@ class ExecutionStructure(object):
 
                 response = analyzer.call(word).decode('utf-8')
                 token = response.split('|')[0]
-                token_pos = token.split('/')[1]
+                token_pos = token.split('/')[2]
                 self.pt_df.a_pos[self.pt_df.token_idx == index] = token_pos
             else:
                 self.pt_df.a_pos[self.pt_df.token_idx == index] = row['pos']

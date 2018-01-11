@@ -2,7 +2,7 @@
 
 import pika, uuid
 
-class AnalyzeText(object):
+class QueueClient(object):
     def __init__(self, rabbitmq_conf, queue_name):
         self.rabbitmq_conf = rabbitmq_conf
         self.queue_name = queue_name

@@ -9,7 +9,7 @@ from tendo import singleton
 from config.base import *
 from lib.rocket_chat import RocketChat 
 from lib.syntaxnet import Syntaxnet
-from lib.analyze_text import AnalyzeText
+from lib.queue_client import QueueClient
 from lib.execution_structure import ExecutionStructure
 from kazoo.client import KazooClient
 from pymongo import MongoClient
@@ -29,7 +29,7 @@ class PublishingMessage(object):
         self.kinds = ['when','what','how','why']
         self.regex = re.compile(r"(^\||\|$)")
 
-    def callback(self, ch, method, properties, body, analyzer, syntaxnet):
+    def callback(self, ch, method, properties, body, analyzer, parser, syntaxnet):
         doc = json.loads(body.decode('utf-8'))
         print(doc)
         rc_channel = doc['rid']
@@ -44,12 +44,19 @@ class PublishingMessage(object):
                 print("formatter:",formatter)
                 reply = self.make_reply(formatter).replace('&enter ','\n')
             else:
-                response = syntaxnet.analyze_syntax(doc['msg'])
-                if not 'error' in response.keys():
+                try:
+                    response = syntaxnet.analyze_syntax(doc['msg'])
+                    if 'error' in response.keys():
+                        raise Exception(response['error'])
+
                     result = syntaxnet.token_to_string(response)
                     df = syntaxnet.token_to_dataframe(response)
     
-                    es_response = self.es.make_execution_structure(df, analyzer)
+                    segmentation_str = syntaxnet.verify_segmentation(response, doc['msg'], self.es.verify_dict)
+                    local_str = parser.call(segmentation_str).decode('utf-8')
+                    local_df = syntaxnet.token_to_dataframe(json.loads(local_str))
+
+                    es_response = self.es.make_execution_structure(local_df, analyzer)
 
                     domain, answer, params = self.es.read_intent(es_response, _uid)
 
@@ -63,8 +70,10 @@ class PublishingMessage(object):
                     self.es.save_user_context(_uid, params)
                     print("formatter:", formatter)
                     reply = self.make_reply(formatter)
-                else:
-                    self.logger.error(response['error'])
+                except:
+                    self.logger.error(traceback.print_exc())
+                    sys.stdout.flush()
+
                     reply = SYSTEM_ERROR_MESSAGE
 
             self.rc.send_message(rc_channel, reply)
@@ -101,12 +110,14 @@ def blocking_connection(publisher):
 
     channel.queue_declare(queue='chat_queue', durable=True)
 
-    analyzer = AnalyzeText(rabbitmq_conf, 'morph_queue')
+    analyzer = QueueClient(rabbitmq_conf, 'morph_queue')
     syntaxnet = Syntaxnet(logger)
+
+    parser = QueueClient(rabbitmq_conf, 'nlp_queue')
 
     channel.basic_qos(prefetch_count=1)
     channel.basic_consume(lambda ch, method, properties, body:
-            publisher.callback(ch, method, properties, body, analyzer, syntaxnet), queue='chat_queue', no_ack=True)
+            publisher.callback(ch, method, properties, body, analyzer, parser, syntaxnet), queue='chat_queue', no_ack=True)
 
     channel.start_consuming()
 
