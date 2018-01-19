@@ -29,45 +29,58 @@ class PublishingMessage(object):
         self.kinds = ['when','what','how','why']
         self.regex = re.compile(r"(^\||\|$)")
 
-    def callback(self, ch, method, properties, body, analyzer, parser, syntaxnet):
+    def get_message(self, body):
         doc = json.loads(body.decode('utf-8'))
-        print(doc)
-        rc_channel = doc['rid']
-        _uid = doc['u']['_id']
+        msg = {}
+        if CHAT_TARGET == 'R':
+            msg['uid'] = doc['u']['_id']
+            msg['room_id'] = doc['rid']
+            msg['text'] = doc['msg']
+        else:
+            msg['uid'] = "test_uid"
+            msg['room_id'] = ""
+            msg['text'] = doc['user_text']
 
-        lock = self.get_lock(_uid)
+        return msg
+
+    def callback(self, ch, method, properties, body, analyzer, parser, syntaxnet):
+        msg = self.get_message(body)
+
+        lock = self.get_lock(msg['uid'])
         if not lock.is_acquired:
             reply = self.rs.reply("localuser", MSG_PROCESSING_ALREADY)
         else:
-            if doc['msg'][:2] == "&&":
-                formatter = doc['msg'].replace('\n','&enter ')
+            if msg['text'][:2] == "&&":
+                formatter = msg['text'].replace('\n','&enter ')
                 print("formatter:",formatter)
                 reply = self.make_reply(formatter).replace('&enter ','\n')
             else:
                 try:
-                    response = syntaxnet.analyze_syntax(doc['msg'])
+                    response = syntaxnet.analyze_syntax(msg['text'])
+                    syntaxnet.save_respons(self.mongodb, response, msg['text'], CHAT_TARGET)
                     if 'error' in response.keys():
                         raise Exception(response['error'])
 
                     result = syntaxnet.token_to_string(response)
                     df = syntaxnet.token_to_dataframe(response)
     
-                    segmentation_str = syntaxnet.verify_segmentation(response, doc['msg'], self.es.verify_dict)
+                    segmentation_str = syntaxnet.verify_segmentation(response, msg['text'], self.es.verify_dict)
                     local_str = parser.call(segmentation_str).decode('utf-8')
                     local_df = syntaxnet.token_to_dataframe(json.loads(local_str))
 
                     es_response = self.es.make_execution_structure(local_df, analyzer)
 
-                    domain, answer, params = self.es.read_intent(es_response, _uid)
+                    domain, answer, params = self.es.read_intent(es_response, msg['uid'])
+                    print("domain:{}, answer:{}".format(domain, answer))
 
                     if domain:
-                        #check_dict = self.es.check_domain(domain, context, _uid)
+                        #check_dict = self.es.check_domain(domain, context, msg['uid'])
                         #formatter = self.es.make_formatter(domain, context, check_dict)
                         formatter = ' '.join([domain, answer])
                     else:
                         formatter = ""
 
-                    self.es.save_user_context(_uid, params)
+                    self.es.save_user_context(msg['uid'], params)
                     print("formatter:", formatter)
                     reply = self.make_reply(formatter)
                 except:
@@ -76,18 +89,32 @@ class PublishingMessage(object):
 
                     reply = SYSTEM_ERROR_MESSAGE
 
-            self.rc.send_message(rc_channel, reply)
+            self.send_message(msg, reply, ch, method, properties)
 
         self.release_lock(lock)
         sys.stdout.flush()
+
+    def send_message(self, msg, reply, ch, method, props):
+        if CHAT_TARGET == 'R':
+            self.rc.send_message(msg['room_id'], reply)
+        elif CHAT_TARGET == 'S':
+            response = {
+                'bot_text':reply,
+                'result':True
+            }
+            ch.basic_publish(exchange='',
+                             routing_key=props.reply_to,
+                             properties=pika.BasicProperties(correlation_id = props.correlation_id),
+                             body=json.dumps(response))
+            ch.basic_ack(delivery_tag = method.delivery_tag)
 
     def make_reply(self, message):
         reply = self.rs.reply("localuser", message)
         return reply
 
-    def get_lock(self, _uid):
-        test = self.zk.ensure_path(ZOOKEEPER_USER_LOCK_PATH + "/" +  _uid)
-        lock = self.zk.Lock(ZOOKEEPER_USER_LOCK_PATH + "/" +  _uid, os.getpid())
+    def get_lock(self, uid):
+        test = self.zk.ensure_path(ZOOKEEPER_USER_LOCK_PATH + "/" +  uid)
+        lock = self.zk.Lock(ZOOKEEPER_USER_LOCK_PATH + "/" +  uid, os.getpid())
 
         try:
             lock.acquire(timeout=0.5)
@@ -108,7 +135,7 @@ def blocking_connection(publisher):
     connection = pika.BlockingConnection(pika.ConnectionParameters(host=rabbitmq_conf['hosts'], credentials=credentials))
     channel = connection.channel()
 
-    channel.queue_declare(queue='chat_queue', durable=True)
+    channel.queue_declare(queue=CHAT_QUEUE, durable=True)
 
     analyzer = QueueClient(rabbitmq_conf, 'morph_queue')
     syntaxnet = Syntaxnet(logger)
@@ -117,7 +144,7 @@ def blocking_connection(publisher):
 
     channel.basic_qos(prefetch_count=1)
     channel.basic_consume(lambda ch, method, properties, body:
-            publisher.callback(ch, method, properties, body, analyzer, parser, syntaxnet), queue='chat_queue', no_ack=True)
+            publisher.callback(ch, method, properties, body, analyzer, parser, syntaxnet), queue=CHAT_QUEUE, no_ack=QUEUE_ACK)
 
     channel.start_consuming()
 
@@ -129,8 +156,7 @@ def main():
     zk.start()
 
     # MongoDB
-    mongodb_conn = MongoClient(mongodb_conf['hosts'],mongodb_conf['port'])
-    mongodb = mongodb_conn.rocketchat
+    mongodb = MongoClient(mongodb_conf['hosts'],mongodb_conf['port'])
 
     # Redis
     #redisdb = redis.Redis(redis_conf['hosts'])
@@ -138,7 +164,7 @@ def main():
 
     # Rivescript
     rs = RiveScript(utf8=True)
-    rs.load_directory("./rule")
+    rs.load_directory(RULE_DIR)
     rs.sort_replies()
 
     # Rocket.chat
@@ -184,7 +210,7 @@ if __name__ == "__main__":
     # -s(--singletone) 중복실행 방지 옵션
     # -e(--env) 개발환경 지정 옵션
     try:
-        opts, args = getopt.getopt(sys.argv[1:],"se:",["singleton","env="])
+        opts, args = getopt.getopt(sys.argv[1:],"st:e:",["singleton","target=","env="])
 
         for opt, arg in opts:
             if opt in ('-s', '--singleton'):
@@ -198,6 +224,17 @@ if __name__ == "__main__":
                     from config.production import *
                 else:
                     raise Exception("Error: -e[--env] option")
+            if opt in ('-t', '--type'):
+                if arg == "simulator":
+                    CHAT_TARGET = "S"
+                    CHAT_QUEUE = "chatbot_simulator"
+                    QUEUE_ACK = False
+                    RULE_DIR  = "./rule/cs_set"
+                else:
+                    CHAT_TARGET = "R"
+                    CHAT_QUEUE = "chat_queue"
+                    QUEUE_ACK = True
+                    RULE_DIR  = "./rule/in_house_set"
 
     except Exception:
         traceback.print_exc()

@@ -5,8 +5,18 @@ import traceback
 from datetime import datetime, timedelta
 from .soa_config import *
 
+class not_found(object):
+    def __getattr__(self, name):
+        def method(self, *args, **kwarg):
+            print("Unknown mehtod '{0}'".format(name))
+
+            return "help", "do"
+
+        return method
+
 class entity(object):
     first_context = 'do'
+    unknown_context = 'unknown'
     entity_dict = None
 
     def __getattr__(self, name):
@@ -19,7 +29,11 @@ class entity(object):
 
     @classmethod
     def do(cls, *args, **kwarg):
-        return soa_info.message[cls.__name__], cls.first_context
+        return cls.__name__, cls.first_context
+
+    @classmethod
+    def not_found(cls, *args, **kwarg):
+        return cls.__name__, cls.unknown_context
 
     @classmethod
     def input_validation(cls, check_list, entities):
@@ -89,7 +103,7 @@ class entity(object):
 class cls_conversation(entity):
     @classmethod
     def do(cls, *args, **kwarg):
-        return soa_info.message[cls.__name__.split('_')[1]], cls.first_context
+        return cls.__name__, cls.first_context
 
     @classmethod
     def accept_another_subject(cls, subject, self_subject):
@@ -103,7 +117,7 @@ class cls_conversation(entity):
 class cls_abstraction(entity):
     @classmethod
     def do(cls, *args, **kwarg):
-        return soa_info.message[cls.__name__.split('_')[1]], cls.first_context
+        return cls.__name__, cls.first_context
 
 class cls_weather(entity):
     @classmethod
@@ -196,3 +210,32 @@ class time(entity):
 
         domain, answer, *params = getattr(eval(es_subject), es_action)(es_object, user_convo=user_convo, subject=kwarg['subject'])
         return domain, answer, params[0]
+
+class cls_cs(entity):
+    @classmethod
+    def do(cls, *args, **kwarg):
+        return cls.__name__, cls.first_context
+
+    @classmethod
+    def want(cls, *args, **kwarg):
+        return cls.__name__, cls.first_context
+
+class refund(cls_cs):
+    @classmethod
+    def do(cls, *args, **kwarg):
+        return cls.__name__, cls.first_context
+
+class money(cls_abstraction):
+    @classmethod
+    def giveme(cls, *args, **kwarg):
+        return cls.__name__, cls.giveme.__name__
+
+class cancel(cls_abstraction):
+    @classmethod
+    def do(cls, *args, **kwarg):
+        if args[0] == ['refund', 'order']:
+            target = args[0]
+        else:
+            target = 'unknown'
+
+        return target, cls.__name__

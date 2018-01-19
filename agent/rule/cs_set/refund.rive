@@ -1,0 +1,10 @@
+! version = 0.1
+
++ refund do
+- 환불 요청을 하셨습니다.
+
++ refund unknown
+- 환불에 대해 어떤 처리를 원하시나요?
+
++ refund cancel
+- 환불 요청에 대해 취소 신청 하셨습니다.

@@ -1,0 +1,13 @@
+! version = 0.1
+
++ processing already
+- 이전 요청을 처리중입니다.
+
++ help do
+- 현재 처리 가능한 CS 유형처리는 [환불] 입니다.
+
++ unknown cancel
+- 무엇을 취소 하시겠습니까?
+
++ *
+- 무슨 말인지 모르겠어요

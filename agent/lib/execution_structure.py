@@ -110,44 +110,43 @@ class ExecutionStructure(object):
         es_kind = self.dependency_label_rule(e, label, parent_label, brothers_label, depth, parent_es_kind)
         print("------------------------ sub end ---------------------------")
 
-        return_str = e_key + ":" + label + "/" + str(token['token_idx'].tolist().pop())
+        es_kind_str = es_kind if es_kind else 'None'
+        return_str = e_key + ":" + label + "/" + str(token['token_idx'].tolist().pop()) + ":" + es_kind_str
         return es_kind, return_str
 
     def merge_es_dict(self, es_kind, child_label, parse_dict, child_parse_dict):
-
+        print("Start -------------------------------")
+        print("merge_es_dict: parse_dict ->", parse_dict)
+        print("merge_es_dict: child_parse_dict ->", child_parse_dict)
         for child_es_kind in child_parse_dict.keys():
-            print("child es kind key:", child_es_kind)
-            print("(L)parse dict:",parse_dict)
-            print("(L)Child parse dict:",child_parse_dict)
-            print("(L)Child es kind:",child_es_kind)
+            value = child_parse_dict[child_es_kind]
             if child_label.split('-')[0] in ['ADVCL','RCMOD','CCOMP']:
                 if es_kind + '_modifier' not in parse_dict.keys():
                     parse_dict[es_kind + '_modifier'] = []
-                parse_dict[es_kind + '_modifier'] += child_parse_dict[child_es_kind]
-                parse_dict[es_kind + '_modifier'].append(child_parse_dict[child_es_kind])
+                parse_dict[es_kind + '_modifier'] += value
             elif child_es_kind in ['modifier']:
                 if es_kind + '_modifier' not in parse_dict.keys():
                     parse_dict[es_kind + '_modifier'] = []
-                parse_dict[es_kind + '_modifier'] += child_parse_dict[child_es_kind]
+                parse_dict[es_kind + '_modifier'] += value
             elif child_es_kind in ['subject']:
                 if child_es_kind  not in parse_dict.keys():
                     parse_dict[child_es_kind] = []
-                parse_dict[child_es_kind] += child_parse_dict[child_es_kind]
+                parse_dict[child_es_kind] += value
             elif child_es_kind in ['special']:
                 if child_label in ['NEG']:
                     if es_kind + '_neg' not in parse_dict.keys():
                         parse_dict[es_kind + '_neg'] = []
-                    parse_dict[es_kind + '_neg'] += child_parse_dict[child_es_kind]
+                    parse_dict[es_kind + '_neg'] += value
                 elif child_label in ['NUM']:
                     if es_kind + '_num' not in parse_dict.keys():
                         parse_dict[es_kind + '_num'] = []
-                    parse_dict[es_kind + '_num'] += child_parse_dict[child_es_kind]
+                    parse_dict[es_kind + '_num'] += value
             elif es_kind == 'object' and child_es_kind in ['object']:
-                parse_dict[es_kind] += child_parse_dict[child_es_kind]
+                parse_dict[es_kind] += value
             else:
                 parse_dict.update(child_parse_dict)
-
-        return parse_dict
+        print("merge_es_dict: parse_dict ->", parse_dict)
+        print("End-------------------------------")
 
     def read_parse_tree(self, idx, parent_es_kind = None, brothers_label = [], depth = 0):
 
@@ -188,7 +187,7 @@ class ExecutionStructure(object):
                         parse_dict[es_kind + '_modifier'] = []
                     parse_dict[es_kind + '_modifier'].append(child_parse_dict)
                 else:
-                    parse_dict = self.merge_es_dict(es_kind, child_label, parse_dict, child_parse_dict)
+                    self.merge_es_dict(es_kind, child_label, parse_dict, child_parse_dict)
 
             print("(L)Merge parse dict:",parse_dict)
         return parse_dict
@@ -266,9 +265,11 @@ class ExecutionStructure(object):
 
     def get_user_convo(self, user_id):
         name = "CONVO-" + user_id
-        user_convo = self.redisdb.hgetall(name)
+        # Temporary
+        #user_convo = self.redisdb.hgetall(name)
+        user_convo = {}
 
-        if user_convo== {}:
+        if user_convo == {}:
             user_convo = {
                 'context' : None,
                 'prev_sao' : {},
@@ -289,12 +290,15 @@ class ExecutionStructure(object):
         self.redisdb.hmset(name, user_convo)
 
     def get_meaning(self, ekey):
+        print("ekey:",ekey)
         word = ekey.split(':')[0]
         print("word:",word,ekey)
         e = self.entities[self.entities['word'] == word]
         row, _ = e.shape
         if row == 1:
-            meaning = e['meanings'].tolist().pop() + ':' + ekey.split(':')[1]
+            meaning = e['meanings'].tolist().pop() + ':' + ekey.split(':')[1] + ':' + ekey.split(':')[2]
+        elif row == 0:
+            meaning = 'not_found' + ':' + ekey.split(':')[1] + ':' + ekey.split(':')[2]
         else:
             meaning = None
 
@@ -377,7 +381,7 @@ class ExecutionStructure(object):
     def read_parse_dict(self, parse_dict):
         es_dict = {}
         print("1. parse_dict:",parse_dict)
-        for es_type in ['subject','action','object']:
+        for es_type in ['subject', 'object', 'action']:
             try:
                 meanings = []
                 for value in parse_dict[es_type]:
@@ -395,13 +399,13 @@ class ExecutionStructure(object):
                     parse_dict['object'] = parse_dict['object'] + objects if 'object' in parse_dict.keys() else objects
                 print("loop parse dict:",parse_dict)
 
-                #for meaning in meanings:
-                #    print("all meaning:",meaning)
-                #    main_meaning = meaning
+                for meaning in meanings:
+                    print("all meaning:",meaning)
 
                 for key in parse_dict.keys():
                     if key.startswith(es_type + "_"):
                         for value in parse_dict[key]:
+                            print("modifier: ", key)
                             if type(value) == dict:
                                 child_es_dict = self.read_parse_dict(value)
                                 meaning, context = self.infer_meaning(child_es_dict)
@@ -409,12 +413,17 @@ class ExecutionStructure(object):
                                 meaning = self.get_meaning(value)
 
                             _, sub_key = key.split("_")
-                            print("es_type, sub_key, meaning:", es_type, sub_key, meaning)
+                            print("es_type, sub_key, main_meaning, meaning:", es_type, sub_key, main_meaning, meaning)
                             if sub_key == 'neg':
                                 es_dict[es_type + "_neg"] = meaning
                             elif sub_key == 'modifier':
+                                modifier_es_type = meaning.split(':')[2]
+                                print("Modifier es type:", modifier_es_type)
                                 if main_meaning == None:
                                     main_meaning = meaning
+                                elif modifier_es_type not in es_dict.keys() or es_dict[modifier_es_type] == None:
+                                    es_dict[modifier_es_type] = meaning
+                                    print("Change es dict:", es_dict)
 
             except KeyError as e:
                 traceback.print_exc()
@@ -458,7 +467,7 @@ class ExecutionStructure(object):
 
             if re.match("^([0-9]+)d\(\)$", es_subject):
                 es_subject = "time()"
-            print("es_subject, es_object:",es_subject, es_object)
+            print("es_subject, es_object, es_action:",es_subject, es_object, es_action)
             subject_param = es_dict['subject'].split(':')[0] if es_dict['subject'] else None
             domain, answer, *params = getattr(eval(es_subject), es_action)(es_object, user_convo=user_convo, subject=subject_param)
             print("Call subject class: {0}, {1}, {2}".format(domain, answer, params))
@@ -467,6 +476,8 @@ class ExecutionStructure(object):
             cls = self.entities[self.entities['meanings'] == es_subject]['type'].tolist().pop()
             domain, answer, *params = getattr(eval('cls_' + cls), es_action)(es_object, user_convo=user_convo, subject=es_subject)
             print("Call subject class: {0}, {1}, {2}".format(domain, answer, params))
+
+        domain = self.config['soa_info']['message'][domain] if domain in self.config['soa_info']['message'].keys() else domain
 
         request = None
         if answer.split(' ')[0] == "required":

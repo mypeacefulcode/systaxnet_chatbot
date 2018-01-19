@@ -68,5 +68,16 @@ ES_CONFIG = {
         'before_delivery' : 'error-before-delivery'
     },
     "special_obj" : ['order','cancel','refund'],
-    "special_act" : ['하다']
+    "special_act" : ['하다'],
+    # S.O.A
+    'soa_info' : {
+        'message' : {
+            'entity' : 'help',
+            'cls_conversation' : 'greeting',
+            'cls_abstraction' : 'help',
+            'cls_cs' : 'help'
+        }
+    }
 }
+
+

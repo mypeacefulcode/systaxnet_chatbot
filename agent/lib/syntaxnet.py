@@ -3,7 +3,7 @@
 import sys, traceback
 import pandas as pd
 import googleapiclient.discovery
-import itertools
+import itertools, time
 
 class Syntaxnet(object):
     def __init__(self, logger):
@@ -150,3 +150,16 @@ class Syntaxnet(object):
             prev_offset = offset + len(word)
 
         return segment_str
+
+    def save_respons(self, mongodb, response, corpus, service_type):
+        doc = {
+            'corpus' : corpus,
+            'created_date' : time.time(),
+            'service' : service_type,
+            'type' : 'L',
+            'parse_tree' : response
+        }
+        try:
+            mongodb.corpusdb.service_log.insert(doc)
+        except:
+            self.logger(traceback.print_exc())
