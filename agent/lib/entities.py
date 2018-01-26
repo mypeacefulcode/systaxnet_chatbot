@@ -100,6 +100,30 @@ class entity(object):
 
         return es_subject, es_action, es_object
 
+class something(entity):
+    @classmethod
+    def __init__(cls, *args, **kwarg):
+        cls.entities = args[0]
+        cls.compound_df = args[1]
+
+        pattern = '^(?=.*' + ')(?=.*'.join(cls.entities) + ').*$'
+        df = cls.compound_df[cls.compound_df.entities.str.contains(pattern)]
+
+        for index, row in df.iterrows():
+            check_flag = True
+            items = row['entities'].split(',')
+            for item in items:
+                item = item.strip()
+                if re.match('.*\+',item) and (item[:-1] not in cls.entities):
+                    check_flag = False
+
+            compound_entity = row['domain']
+        cls.compound_entity = compound_entity if check_flag else 'Unknown'
+
+    @classmethod
+    def do(cls, *args, **kwarg):
+        return cls.compound_entity, cls.first_context
+
 class cls_conversation(entity):
     @classmethod
     def do(cls, *args, **kwarg):
@@ -187,7 +211,6 @@ class weather(cls_weather):
             weather_date = cls.get_time('0d')
 
         message = args[0]['area'] + '의 ' + weather_date.strftime('%m월 %d일') + ' 날씨는 xxxx입니다.'
-
         return message
 
     @classmethod
@@ -225,17 +248,33 @@ class refund(cls_cs):
     def do(cls, *args, **kwarg):
         return cls.__name__, cls.first_context
 
+    @classmethod
+    def want(cls, *args, **kwarg):
+        cls_name, cls_action = cls.do(*args, **kwarg)
+        return cls_name, cls_action
+
 class money(cls_abstraction):
     @classmethod
     def giveme(cls, *args, **kwarg):
         return cls.__name__, cls.giveme.__name__
 
+    @classmethod
+    def turn(cls, *args, **kwarg):
+        cls_name, cls_action = cls.giveme(*args, **kwarg)
+        return cls_name, cls_action
+        
+
 class cancel(cls_abstraction):
     @classmethod
     def do(cls, *args, **kwarg):
-        if args[0] == ['refund', 'order']:
+        if args[0] in ['refund', 'order']:
             target = args[0]
         else:
             target = 'unknown'
-
         return target, cls.__name__
+
+    @classmethod
+    def want(cls, *args, **kwarg):
+        target, cls_name = cls.do(*args, **kwarg)
+        return target, cls_name
+

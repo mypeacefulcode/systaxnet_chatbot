@@ -22,8 +22,8 @@ class ExecutionStructure(object):
         csv_file = path + self.config['entities_config']['parse_label_file']
         self.parse_label = pd.read_csv(csv_file)
 
-        csv_file = path + self.config['entities_config']['compound_entities_file']
-        self.compound_entities = pd.read_csv(csv_file).fillna("")
+        csv_file = path + self.config['entities_config']['domain_exp_file']
+        self.domain_exp = pd.read_csv(csv_file).fillna("")
 
         csv_file = path + self.config['entities_config']['verify_dict_file']
         self.verify_dict = pd.read_csv(csv_file).fillna("")
@@ -296,33 +296,34 @@ class ExecutionStructure(object):
         word = ekey.split(':')[0]
         print("word:",word,ekey)
         e = self.entities[self.entities['word'] == word]
-        print("E:",e)
         row, _ = e.shape
         if row == 1:
             meaning = e['meanings'].tolist().pop() + ':' + ekey.split(':')[1] + ':' + ekey.split(':')[2] + ':' + e['dependency'].tolist().pop()
         elif row == 0:
-            meaning = 'not_found' + ':' + ekey.split(':')[1] + ':' + ekey.split(':')[2] + ':T'
+            meaning = 'not_found' + ':' + ekey.split(':')[1] + ':' + ekey.split(':')[2] + ':' + e['dependency'].tolist().pop()
         else:
             meaning = None
 
         return meaning
 
     def infer_meaning(self, es_type, p_meaning, values):
-        print("Values:",values)
         meanings = []
         if type(values) == dict:
             for key, value in values.items():
-                for s_value in value:
-                    tmp = s_value.split(':')
-                    tmp[2] = key
-                    meaning = ':'.join(tmp)
-                    meanings.append(meaning)
+                tmp = value.split(':')
+                tmp[2] = key
+                meaning = ':'.join(tmp)
+                meanings.append(meaning)
         elif type(values) == list:
             meanings = values[:]
         else:
             meanings.append(values)
 
-        return meanings 
+        dependency = p_meaning.split(':')[3]
+        if dependency == "T":
+            p_meaning = meanings[:]
+
+        return p_meaning
 
     def reset_parse_dict(self, es_type, meanings):
         print("reset_parse_dict-----------[{},{}]".format(es_type, meanings))
@@ -363,41 +364,27 @@ class ExecutionStructure(object):
         print("reset_parse_dict-----------End.")
         return main_meaning, actions, objects
 
-    def read_parse_dict(self, parse_dict):
+    def read_parse_dict(self, parse_dict, p_meaning=None):
         es_dict = {}
         print("1. parse_dict:",parse_dict)
 
         for es_type in ['subject', 'object', 'action']:
             try:
                 sub_keys = []
-                meanings = []
-                m_meanings = []
                 for key in parse_dict.keys():
                     if re.match(es_type + "_", key):
                         sub_keys.append(key)
                 
                 for value in parse_dict[es_type]:
-                    m_meanings.append(self.get_meaning(value))
-                meanings = m_meanings[:]
+                    p_meaning = self.get_meaning(value)
 
                 for key in sub_keys:
                     if key.split('_')[1] == 'modifier':
-                        if type(parse_dict[key][0]) == dict:
-                            sub_es_dict = self.read_parse_dict(parse_dict[key][0])
-                            values = self.infer_meaning(es_type, m_meanings, sub_es_dict)
+                        if type(parse_dict[key]) == dict:
+                            values = self.read_parse_dict(parse_dict[key], p_meaning)
                         else:
                             values = parse_dict[key]
-
-                        tmp = []
-                        dependency = False
-                        for meaning in m_meanings:
-                            if meaning.split(':')[3] == 'T':
-                                dependency = True
-                            else:
-                                tmp.append(meaning)
-                        if dependency:
-                            meanings = values[:]
-                        meanings += tmp[:]
+                        meanings = self.infer_meaning(es_type, p_meaning, values)
 
             except KeyError as e:
                 traceback.print_exc()
@@ -486,23 +473,8 @@ class ExecutionStructure(object):
 
         user_convo = self.get_user_convo(user_id)
         es_dict = self.read_parse_dict(self.parse_dict)
-        print("Result -> es_dict:",es_dict)
-        print("user convo:",user_convo)
-
-        tmp_es_dict = {
-            'subject':[],
-            'object':[],
-            'action':[]
-        }
-        for es_type in ['subject', 'object', 'action']:
-            for value in es_dict[es_type]:
-                sub_es_type = value.split(':')[2]
-                if es_type != sub_es_type and (es_dict[sub_es_type] == [] or es_dict[sub_es_type][0].split(':')[0] == 'not_found'):
-                    tmp_es_dict[sub_es_type].append(value)
-                else:
-                    tmp_es_dict[es_type].append(value)
-        es_dict = tmp_es_dict.copy()
         print("final es_dict:",es_dict)
+        print("user convo:",user_convo)
 
         try:
             if user_convo['request']:
@@ -510,13 +482,13 @@ class ExecutionStructure(object):
                 es_subject = user_convo['prev_sao']['subject'].split(':')[0]
                 es_object = es_dict['subject'].split(':')[0]
             else:
-                es_action = es_dict['action'][0].split(':')[0] if es_dict['action'] else 'do'
-                es_object = es_dict['object'][0].split(':')[0] if es_dict['object'] else None
-                if len(es_dict['subject']) > 1:
+                es_action = es_dict['action'].split(':')[0] if es_dict['action'] else 'do'
+                es_object = es_dict['object'].split(':')[0] if es_dict['object'] else None
+                if type(es_dict['subject']) == list:
+                    es_subject = "something()"
                     subjects = [ value[0] for value in map(lambda x: x.split(':'), es_dict['subject']) ]
-                    es_subject = "something(subjects, self.compound_entities)"
                 else:
-                    es_subject = es_dict['subject'][0].split(':')[0] + '()' if es_dict['subject'][0] else 'entity()'
+                    es_subject = es_dict['subject'].split(':')[0] + '()' if es_dict['subject'] else 'entity()'
                     subjects = None
 
             if re.match("^([0-9]+)d\(\)$", es_subject):
@@ -530,8 +502,7 @@ class ExecutionStructure(object):
             domain, answer, *params = getattr(eval(es_subject), es_action)(es_object, **send_params)
             print("Return values: {0}, {1}, {2}".format(domain, answer, params))
         except NameError:
-            traceback.print_exc()
-            es_subject = es_dict['subject'][0].split(':')[0]
+            es_subject = es_dict['subject'].split(':')[0]
             cls = self.entities[self.entities['meanings'] == es_subject]['type'].tolist().pop()
             domain, answer, *params = getattr(eval('cls_' + cls), es_action)(es_object, user_convo=user_convo, subject=es_subject)
             print("Call subject class: {0}, {1}, {2}".format(domain, answer, params))

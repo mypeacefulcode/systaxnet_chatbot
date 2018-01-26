@@ -36,16 +36,28 @@ class RpcSample(object):
 
 rpc_sample = RpcSample()
 
-text = "환불 하고싶어요"
-#text = "돈 돌려주세요"
-#text = "주문 취소 할수있나요?"
-#text = "환불 하려면 어떻게 해야 하나요"
-body_json = {"user_text":text}
-body_str = json.dumps(body_json)
+credentials = pika.PlainCredentials('guest','wmind2017')
+connection = pika.BlockingConnection(pika.ConnectionParameters(host='35.200.123.60', credentials=credentials))
+channel = connection.channel()
+channel.queue_declare(queue='speech_queue', durable=True)
+print(' [*] Waiting for messages. To exit press CTRL+C')
 
-print(" [x] Requesting %s" % body_str)
-response = json.loads(rpc_sample.call(body_str))
-response_str = json.dumps(response, indent=4)
+def callback(ch, method, properties, body):
+    body_json = {"user_text":body.decode('utf-8')}
+    body_str = json.dumps(body_json)
 
-print(" [.] Got\n %s" % response_str)
-print("Text:{}".format(response['bot_text']))
+    print(" [x] Requesting %s" % body_str)
+    response = json.loads(rpc_sample.call(body_str))
+    response_str = json.dumps(response, indent=4)
+
+    print(" [.] Got\n %s" % response_str)
+    print("Text:{}".format(response['bot_text']))
+
+    ch.basic_ack(delivery_tag = method.delivery_tag)
+
+channel.basic_qos(prefetch_count=1)
+channel.basic_consume(callback, queue='speech_queue')
+
+channel.start_consuming()
+
+
