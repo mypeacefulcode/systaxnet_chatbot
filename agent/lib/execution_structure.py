@@ -125,26 +125,37 @@ class ExecutionStructure(object):
             if child_label.split('-')[0] in ['ADVCL','RCMOD','CCOMP']:
                 if es_kind + '_modifier' not in parse_dict.keys():
                     parse_dict[es_kind + '_modifier'] = []
-                parse_dict[es_kind + '_modifier'] += value
+
+                if value not in parse_dict[es_kind + '_modifier']:
+                    parse_dict[es_kind + '_modifier'] += value
             elif child_es_kind in ['modifier']:
                 if es_kind + '_modifier' not in parse_dict.keys():
                     parse_dict[es_kind + '_modifier'] = []
-                parse_dict[es_kind + '_modifier'] += value
+
+                if value not in parse_dict[es_kind + '_modifier']:
+                    parse_dict[es_kind + '_modifier'] += value
             elif child_es_kind in ['subject']:
                 if child_es_kind  not in parse_dict.keys():
                     parse_dict[child_es_kind] = []
-                parse_dict[child_es_kind] += value
+
+                if value not in parse_dict[child_es_kind]:
+                    parse_dict[child_es_kind] += value
             elif child_es_kind in ['special']:
                 if child_label in ['NEG']:
                     if es_kind + '_neg' not in parse_dict.keys():
                         parse_dict[es_kind + '_neg'] = []
-                    parse_dict[es_kind + '_neg'] += value
+
+                    if value not in parse_dict[es_kind + '_neg']:
+                        parse_dict[es_kind + '_neg'] += value
                 elif child_label in ['NUM']:
                     if es_kind + '_num' not in parse_dict.keys():
                         parse_dict[es_kind + '_num'] = []
-                    parse_dict[es_kind + '_num'] += value
+
+                    if value not in parse_dict[es_kind + '_num']:
+                        parse_dict[es_kind + '_num'] += value
             elif es_kind == 'object' and child_es_kind in ['object']:
-                parse_dict[es_kind] += value
+                if value not in parse_dict[es_kind]:
+                    parse_dict[es_kind] += value
             else:
                 parse_dict.update(child_parse_dict)
         print("merge_es_dict: parse_dict ->", parse_dict)
