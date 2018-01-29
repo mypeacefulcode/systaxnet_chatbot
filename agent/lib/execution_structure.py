@@ -1,6 +1,6 @@
 #-*- coding: utf-8 -*-
 
-import sys, traceback
+import sys, traceback, copy
 import pandas as pd
 pd.set_option('display.width', 1000)
 pd.options.mode.chained_assignment = None
@@ -50,7 +50,7 @@ class ExecutionStructure(object):
             else:
                 self.pt_df.a_pos[self.pt_df.token_idx == index] = row['pos']
 
-    def dependency_label_rule(self, entity, my_label, parent_label, brothers_label, depth, parent_es_kind):
+    def dependency_label_rule(self, entity, my_label, my_pos, parent_label, brothers_label, depth, parent_es_kind):
         labels_set = set([my_label] + brothers_label)
         print("labels_set, my_label, parent_es_kind:", labels_set, my_label, parent_es_kind)
 
@@ -62,7 +62,7 @@ class ExecutionStructure(object):
 
         es_kind = None
 
-        es_action = set(['ROOT-VERB','ROOT-PRT','ROOT-ADJ','ADVCL-VERB','ROOT-ADJECTIVE','AUX-VERB','SUFF'])
+        es_action = set(['ROOT-VERB','ROOT-PRT','ROOT-ADJ','ADVCL-VERB','ROOT-ADJECTIVE','AUX-VERB','ROOT-AFFIX','SUFF'])
         es_subject = set(['ROOT-NOUN','NSUBJ','AUX-NOUN','CCOMP','ADVCL-NOUN','DOBJ','NN'])
         es_modifier = set(['RCMOD','ADVMOD','ATTR'])
         es_object = set(['DOBJ','NN'])
@@ -74,7 +74,7 @@ class ExecutionStructure(object):
                 print("S:",s)
                 if my_label in s and key == 'modifier':
                     if my_label == 'ATTR' and parent_es_kind == 'action':
-                        es_kind = 'action'
+                        es_kind = 'modifier'
                     else:
                         es_kind = key
                 elif len(s) > 0 and my_label == s.pop():
@@ -86,6 +86,10 @@ class ExecutionStructure(object):
                 es_kind = "subject_suff"
             elif my_label == "DEP" and parent_es_kind == 'object':
                 es_kind = "object"
+            elif my_label == "DEP" and parent_es_kind == 'subject':
+                es_kind = "subject"
+            elif my_label == "DEP" and parent_es_kind == 'action':
+                es_kind = "subject"
             elif my_label == "NN" and parent_es_kind == "object":
                 es_kind = "object"
             elif my_label == "NN" and parent_es_kind == "subject":
@@ -107,7 +111,7 @@ class ExecutionStructure(object):
         print("e_key:",e_key)
         e = self.entities[self.entities['word'] == e_key]
 
-        es_kind = self.dependency_label_rule(e, label, parent_label, brothers_label, depth, parent_es_kind)
+        es_kind = self.dependency_label_rule(e, label, pos, parent_label, brothers_label, depth, parent_es_kind)
         print("------------------------ sub end ---------------------------")
 
         es_kind_str = es_kind if es_kind else 'None'
@@ -126,35 +130,35 @@ class ExecutionStructure(object):
                 if es_kind + '_modifier' not in parse_dict.keys():
                     parse_dict[es_kind + '_modifier'] = []
 
-                if value not in parse_dict[es_kind + '_modifier']:
+                if value[0] not in parse_dict[es_kind + '_modifier']:
                     parse_dict[es_kind + '_modifier'] += value
             elif child_es_kind in ['modifier']:
                 if es_kind + '_modifier' not in parse_dict.keys():
                     parse_dict[es_kind + '_modifier'] = []
 
-                if value not in parse_dict[es_kind + '_modifier']:
+                if value[0] not in parse_dict[es_kind + '_modifier']:
                     parse_dict[es_kind + '_modifier'] += value
             elif child_es_kind in ['subject']:
                 if child_es_kind  not in parse_dict.keys():
                     parse_dict[child_es_kind] = []
 
-                if value not in parse_dict[child_es_kind]:
+                if value[0] not in parse_dict[child_es_kind]:
                     parse_dict[child_es_kind] += value
             elif child_es_kind in ['special']:
                 if child_label in ['NEG']:
                     if es_kind + '_neg' not in parse_dict.keys():
                         parse_dict[es_kind + '_neg'] = []
 
-                    if value not in parse_dict[es_kind + '_neg']:
+                    if value[0] not in parse_dict[es_kind + '_neg']:
                         parse_dict[es_kind + '_neg'] += value
                 elif child_label in ['NUM']:
                     if es_kind + '_num' not in parse_dict.keys():
                         parse_dict[es_kind + '_num'] = []
 
-                    if value not in parse_dict[es_kind + '_num']:
+                    if value[0] not in parse_dict[es_kind + '_num']:
                         parse_dict[es_kind + '_num'] += value
             elif es_kind == 'object' and child_es_kind in ['object']:
-                if value not in parse_dict[es_kind]:
+                if value[0] not in parse_dict[es_kind]:
                     parse_dict[es_kind] += value
             else:
                 parse_dict.update(child_parse_dict)
@@ -226,40 +230,6 @@ class ExecutionStructure(object):
         print("parse_dict:",parse_dict)
 
         return parse_dict
-
-    """
-    def verify_answer(self, exec_dict, context, sub_context):
-        answer = exec_dict['action_entity'] + exec_dict['subject_entity']
-        if answer == ['아니다']:
-            r_value = False
-        elif answer == ['맞다']:
-            r_value = True
-        elif sub_context == 'select-order':
-            if es_how['origin'][0].strip() in ['2 번','1 번']:
-                r_value = True
-            else:
-                r_value = False
-        else:
-            r_value = None
-            pass
-
-        return r_value
-
-    def get_next_context(self, context, sub_context):
-        next_context = ''
-        if context == 'cancel-order':
-            if sub_context == 'begin':
-                next_context = 'select-order'
-            elif sub_context == 'select-order':
-                next_context = 'finish'
-        elif context == 'refund':
-            if sub_context == 'begin':
-                next_context = 'select-order'
-            elif sub_context == 'select-order':
-                next_context = 'finish'
-
-        return next_context
-    """
 
     def verify_domain(self, domain_df, es_dict):
         p = re.compile('.*\+')
@@ -380,6 +350,7 @@ class ExecutionStructure(object):
 
         for es_type in ['subject', 'object', 'action']:
             try:
+                print("es_dict(sub loop):",es_dict)
                 sub_keys = []
                 meanings = []
                 m_meanings = []
@@ -390,8 +361,11 @@ class ExecutionStructure(object):
                 for value in parse_dict[es_type]:
                     m_meanings.append(self.get_meaning(value))
                 meanings = m_meanings[:]
+                print("++++++++++++++++++++++++++++++++++")
+                print("rr meanings:",meanings)
 
                 for key in sub_keys:
+                    print("key:",key)
                     if key.split('_')[1] == 'modifier':
                         if type(parse_dict[key][0]) == dict:
                             sub_es_dict = self.read_parse_dict(parse_dict[key][0])
@@ -399,16 +373,38 @@ class ExecutionStructure(object):
                         else:
                             values = parse_dict[key]
 
-                        tmp = []
-                        dependency = False
-                        for meaning in m_meanings:
-                            if meaning.split(':')[3] == 'T':
-                                dependency = True
-                            else:
-                                tmp.append(meaning)
-                        if dependency:
-                            meanings = values[:]
-                        meanings += tmp[:]
+                        print("values:",values)
+                        if es_type in ['subject','object']:
+                            tmp = []
+                            dependency = False
+                            for meaning in m_meanings:
+                                if meaning.split(':')[3] == 'T':
+                                    dependency = True
+                                else:
+                                    tmp.append(meaning)
+                            if dependency:
+                                meanings = values[:]
+                                meanings += tmp[:]
+                        else:
+                            check_es_dict = copy.deepcopy(es_dict)
+                            for value in values:
+                                sub_meaning = self.get_meaning(value)
+                                sub_es_type = value.split(':')[2] 
+                                print("sub_meaning:{}, check_es_dict:{}".format(sub_meaning, check_es_dict))
+                                if sub_meaning and sub_es_type != "action" and check_es_dict[sub_es_type] == []:
+                                    print("+++++++++++sub_meaning:",sub_meaning)
+                                    es_dict[sub_es_type].append(sub_meaning)
+
+                        print("meanings:",meanings)
+                    elif key.split('_')[1] == 'suff':
+                        if es_type == 'subject':
+                            parse_dict['action'] += parse_dict[key]
+                    elif key.split('_')[1] == 'neg':
+                        if key not in es_dict.keys():
+                            es_dict[key] = []
+                        for value in parse_dict[key]:
+                            sub_meaning = self.get_meaning(value)
+                            es_dict[key].append(sub_meaning)
 
             except KeyError as e:
                 traceback.print_exc()
@@ -417,68 +413,6 @@ class ExecutionStructure(object):
             print("es_dict(loop):",es_dict)
 
         return es_dict
-
-        """
-        for es_type in ['subject', 'object', 'action']:
-            try:
-                meanings = []
-                for value in parse_dict[es_type]:
-                    if type(value) == dict:
-                        child_es_dict = self.read_parse_dict(value)
-                        print("child_main_es_dict:",child_es_dict)
-                        meanings.append("child_es_dict")
-                    else:
-                        meanings.append(self.get_meaning(value))
-
-                main_meaning, actions, objects = self.reset_parse_dict(es_type, meanings)
-                if actions:
-                    parse_dict['action'] = parse_dict['action'] + actions if 'action' in parse_dict.keys() else actions
-                elif objects:
-                    parse_dict['object'] = parse_dict['object'] + objects if 'object' in parse_dict.keys() else objects
-                print("loop parse dict:",parse_dict)
-
-                for meaning in meanings:
-                    print("all meaning:",meaning)
-
-                for key in parse_dict.keys():
-                    if key.startswith(es_type + "_"):
-                        for value in parse_dict[key]:
-                            if type(value) == dict:
-                                child_es_dict = self.read_parse_dict(value)
-                                meaning = child_es_dict
-                                #meaning, context = self.infer_meaning(key, child_es_dict)
-                                #meaning = ['cancelNOUN:RCMOD/1:modifier',"order:NN/0:subject"]
-                                #main_meaning = ['cancelNOUN:RCMOD/1:modifier',"order:NN/0:subject"]
-                                print("meaning:{}, value:{}, child_es_dict:{}".format(meaning, value, child_es_dict))
-                            else:
-                                meaning = self.get_meaning(value)
-                                print("A:A:A:A: value:{}, meaning:{}".format(value, meaning))
-                            print("meaning:{} modifier:{} value:{}".format(meaning,key,value))
-
-                            
-                            #_, sub_key = key.split("_")
-                            #print("es_type, sub_key, main_meaning, meaning:", es_type, sub_key, main_meaning, meaning)
-                            #if sub_key == 'neg':
-                            #    es_dict[es_type + "_neg"] = meaning
-                            #elif sub_key == 'modifier':
-                            #    modifier_es_type = meaning.split(':')[2]
-                            #    print("Modifier es type:", modifier_es_type)
-                            #    if main_meaning == None:
-                            #        main_meaning = meaning
-                            #    elif modifier_es_type not in es_dict.keys() or es_dict[modifier_es_type] == None:
-                            #        es_dict[modifier_es_type] = meaning
-                            #        print("Change es dict:", es_dict)
-                            
-
-            except KeyError as e:
-                traceback.print_exc()
-                main_meaning = None
-
-            es_dict[es_type] = main_meaning
-            print("es_dict(loop):",es_dict)
-
-        return es_dict
-        """
 
     def read_intent(self, parse_dict, user_id):
         self.parse_dict = parse_dict
@@ -508,10 +442,17 @@ class ExecutionStructure(object):
         for es_type in ['subject', 'object', 'action']:
             for value in es_dict[es_type]:
                 sub_es_type = value.split(':')[2]
-                if es_type != sub_es_type and (es_dict[sub_es_type] == [] or es_dict[sub_es_type][0].split(':')[0] == 'not_found'):
+                if sub_es_type in ['subjectd', 'object', 'action'] and \
+                   es_type != sub_es_type and (es_dict[sub_es_type] == [] or es_dict[sub_es_type][0].split(':')[0] == 'not_found'):
                     tmp_es_dict[sub_es_type].append(value)
                 else:
                     tmp_es_dict[es_type].append(value)
+
+        if 'action_neg' in es_dict.keys():
+            tmp_es_dict['action_neg'] = es_dict['action_neg']
+        else:
+            action_neg = ''
+
         es_dict = tmp_es_dict.copy()
         print("final es_dict:",es_dict)
 
@@ -521,13 +462,38 @@ class ExecutionStructure(object):
                 es_subject = user_convo['prev_sao']['subject'].split(':')[0]
                 es_object = es_dict['subject'].split(':')[0]
             else:
-                es_action = es_dict['action'][0].split(':')[0] if es_dict['action'] else 'do'
-                es_object = es_dict['object'][0].split(':')[0] if es_dict['object'] else None
-                if len(es_dict['subject']) > 1:
-                    subjects = [ value[0] for value in map(lambda x: x.split(':'), es_dict['subject']) ]
-                    es_subject = "something(subjects, self.compound_entities)"
+                if es_dict['action'] != []:
+                    es_action = ''
+                    for value in es_dict['action']:
+                        if value.split(':')[0] == 'not_found' and es_action == '':
+                            es_action = 'not_found'
+                        elif value.split(':')[0] != 'not_found':
+                            es_action = value.split(':')[0]
                 else:
+                    es_action = 'do'
+
+                if 'action_neg' in es_dict.keys():
+                    if es_dict['action_neg'][0].split(':')[0] == 'not':
+                        action_neg = 'not'
+
+                es_object = es_dict['object'][0].split(':')[0] if es_dict['object'] else None
+
+                if len(es_dict['subject']) > 1:
+                    for value in map(lambda x: x.split(':'), es_dict['subject']):
+                        subjects = []
+                        if value[0] != 'not_found':
+                            subjects.append(value[0])
+
+                    if len(subjects) > 1:
+                        es_subject = "something(subjects, self.compound_entities)"
+                    else:
+                        es_subject = subjects[0]
+                        subjects = None
+                elif len(es_dict['subject']) == 1:
                     es_subject = es_dict['subject'][0].split(':')[0] + '()' if es_dict['subject'][0] else 'entity()'
+                    subjects = None
+                else:
+                    es_subject = 'not_found()'
                     subjects = None
 
             if re.match("^([0-9]+)d\(\)$", es_subject):
@@ -536,7 +502,8 @@ class ExecutionStructure(object):
             print("es_subject, es_object, es_action:",es_subject, es_object, es_action)
             send_params = {
                 'user_convo':user_convo,
-                'subjects':subjects
+                'subjects':subjects,
+                'action_neg':action_neg
             }
             domain, answer, *params = getattr(eval(es_subject), es_action)(es_object, **send_params)
             print("Return values: {0}, {1}, {2}".format(domain, answer, params))

@@ -36,16 +36,22 @@ class RpcSample(object):
 
 rpc_sample = RpcSample()
 
-text = "환불 하고싶어요"
-#text = "돈 돌려주세요"
-#text = "주문 취소 할수있나요?"
-#text = "환불 하려면 어떻게 해야 하나요"
-body_json = {"user_text":text}
-body_str = json.dumps(body_json)
+texts = [
+    "환불 하고싶어요",
+    "돈 돌려주세요",
+    "주문 취소 할수있나요?",
+    "환불 하려면 어떻게 해야 하나요"
+]
+texts = ["환불 하려면 어떻게 해야 하나요"]
+texts = ["환불 해"]
 
-print(" [x] Requesting %s" % body_str)
-response = json.loads(rpc_sample.call(body_str))
-response_str = json.dumps(response, indent=4)
+for text in texts:
+    body_json = {"user_text":text}
+    body_str = json.dumps(body_json)
 
-print(" [.] Got\n %s" % response_str)
-print("Text:{}".format(response['bot_text']))
+    print(" [x] Requesting %s" % body_str)
+    response = json.loads(rpc_sample.call(body_str))
+    response_str = json.dumps(response, indent=4)
+
+    print(" [.] Got\n %s" % response_str)
+    print("Text:{}".format(response['bot_text']))

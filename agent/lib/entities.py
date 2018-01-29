@@ -108,16 +108,21 @@ class something(entity):
 
         pattern = '^(?=.*' + ')(?=.*'.join(cls.entities) + ').*$'
         df = cls.compound_df[cls.compound_df.entities.str.contains(pattern)]
+        row, _ = df.shape
 
-        for index, row in df.iterrows():
-            check_flag = True
-            items = row['entities'].split(',')
-            for item in items:
-                item = item.strip()
-                if re.match('.*\+',item) and (item[:-1] not in cls.entities):
-                    check_flag = False
+        if row > 0 :
+            for index, row in df.iterrows():
+                check_flag = True
+                items = row['entities'].split(',')
+                for item in items:
+                    item = item.strip()
+                    if re.match('.*\+',item) and (item[:-1] not in cls.entities):
+                        check_flag = False
 
-            compound_entity = row['domain']
+                compound_entity = row['domain']
+        else:
+            check_flag = False
+
         cls.compound_entity = compound_entity if check_flag else 'Unknown'
 
     @classmethod
@@ -246,7 +251,27 @@ class cls_cs(entity):
 class refund(cls_cs):
     @classmethod
     def do(cls, *args, **kwarg):
-        return cls.__name__, cls.first_context
+        action_not = ' not' if kwarg['action_neg'] == 'not' else ''
+        return cls.__name__, cls.first_context + action_not
+
+    @classmethod
+    def want(cls, *args, **kwarg):
+        cls_name, cls_action = cls.do(*args, **kwarg)
+        return cls_name, cls_action
+
+    @classmethod
+    def give(cls, *args, **kwarg):
+        cls_name, cls_action = cls.do(*args, **kwarg)
+        return cls_name, cls_action
+
+class order(cls_cs):
+    @classmethod
+    def do(cls, *args, **kwarg):
+        if args[0] == 'cancel':
+                cls_action = 'cancel'
+        else:
+                cls_action = 'do'
+        return cls.__name__, cls_action 
 
     @classmethod
     def want(cls, *args, **kwarg):

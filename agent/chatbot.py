@@ -87,7 +87,9 @@ class PublishingMessage(object):
                     self.logger.error(traceback.print_exc())
                     sys.stdout.flush()
 
-                    reply = SYSTEM_ERROR_MESSAGE
+                    formatter = "help do"
+                    reply = self.make_reply(formatter)
+                    #reply = SYSTEM_ERROR_MESSAGE
 
             self.send_message(msg, reply, ch, method, properties)
 
@@ -220,6 +222,8 @@ if __name__ == "__main__":
                     from config.local import *
                 elif arg == "development":
                     from config.development import *
+                elif arg == "release":
+                    from config.release import *
                 elif arg == "production":
                     from config.production import *
                 else:

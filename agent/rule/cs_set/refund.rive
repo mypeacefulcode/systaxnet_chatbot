@@ -3,6 +3,9 @@
 + refund do
 - 환불 요청을 하셨습니다.
 
++ refund do not
+- 환불 요청 안하시나요?
+
 + refund unknown
 - 환불에 대해 어떤 처리를 원하시나요?
 
