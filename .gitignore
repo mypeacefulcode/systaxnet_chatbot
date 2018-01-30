@@ -4,7 +4,6 @@
 *.bak
 *.log
 *.out
-*.csv
 
 venv/
 logs/

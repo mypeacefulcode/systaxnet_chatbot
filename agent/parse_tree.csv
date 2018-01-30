@@ -1,5 +1,8 @@
 head_token_idx,label,pos,text,token_idx,a_pos,exec_pos
-2,ADVCL,NOUN,환불,0,,
-0,SUFF,AFFIX,하려고,1,,
-2,ROOT,UNKNOWN,하는데,2,,
-2,PRT,PRT,요,3,,
+1,NN,NOUN,전화,0,,
+2,NN,NOUN,번호,1,,
+4,ADVCL,UNKNOWN,바꾸려면,2,,
+4,ADVMOD,ADJ,어떻게,3,,
+5,ADVCL,VERB,해야,4,,
+5,ROOT,VERB,하나,5,,
+5,PRT,PRT,요,6,,
