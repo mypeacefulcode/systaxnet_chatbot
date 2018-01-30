@@ -103,31 +103,41 @@ class entity(object):
 class something(entity):
     @classmethod
     def __init__(cls, *args, **kwarg):
-        cls.entities = args[0]
-        cls.compound_df = args[1]
+        cls.entities = [ value for value in args[0] if value not in args[1]]
+        cls.derived_verb = args[1]
+        cls.compound_df = args[2]
 
-        pattern = '^(?=.*' + ')(?=.*'.join(cls.entities) + ').*$'
-        df = cls.compound_df[cls.compound_df.entities.str.contains(pattern)]
-        row, _ = df.shape
-
-        if row > 0 :
-            for index, row in df.iterrows():
-                check_flag = True
-                items = row['entities'].split(',')
-                for item in items:
-                    item = item.strip()
-                    if re.match('.*\+',item) and (item[:-1] not in cls.entities):
-                        check_flag = False
-
-                compound_entity = row['domain']
+        if len(cls.entities) == 1:
+            compound_entity = cls.entities[0]
+            check_flag =True 
         else:
-            check_flag = False
+            pattern = '^(?=.*' + ')(?=.*'.join(cls.entities) + ').*$'
+            df = cls.compound_df[cls.compound_df.entities.str.contains(pattern)]
+            row, _ = df.shape
+
+            if row > 0 :
+                for index, row in df.iterrows():
+                    check_flag = True
+                    items = row['entities'].split(',')
+                    for item in items:
+                        item = item.strip()
+                        if re.match('.*\+',item) and (item[:-1] not in cls.entities):
+                            check_flag = False
+
+                    compound_entity = row['domain']
+            else:
+                check_flag = False
 
         cls.compound_entity = compound_entity if check_flag else 'Unknown'
 
     @classmethod
     def do(cls, *args, **kwarg):
-        return cls.compound_entity, cls.first_context
+        action = cls.derived_verb[0] if cls.derived_verb != [] else cls.first_context
+        return cls.compound_entity, action
+
+    @classmethod
+    def change(cls, *args, **kwarg):
+        return cls.compound_entity, cls.change.__name__
 
 class cls_conversation(entity):
     @classmethod
@@ -277,6 +287,21 @@ class order(cls_cs):
     def want(cls, *args, **kwarg):
         cls_name, cls_action = cls.do(*args, **kwarg)
         return cls_name, cls_action
+
+class cancelorder(cls_cs):
+    @classmethod
+    def do(cls, *args, **kwarg):
+        if args[0] == 'cancel':
+                cls_action = 'cancel'
+        else:
+                cls_action = 'do'
+        return cls.__name__, cls_action 
+
+    @classmethod
+    def want(cls, *args, **kwarg):
+        cls_name, cls_action = cls.do(*args, **kwarg)
+        return cls_name, cls_action
+
 
 class money(cls_abstraction):
     @classmethod

@@ -93,9 +93,11 @@ class ExecutionStructure(object):
             elif my_label == "NN" and parent_es_kind == "object":
                 es_kind = "object"
             elif my_label == "NN" and parent_es_kind == "subject":
-                es_kind = "object"
+                es_kind = "subject"
             elif my_label in ["NN","DOBJ"] and parent_es_kind == "action":
                 es_kind = "subject"
+            elif my_label in ["DOBJ"]:
+                es_kind = "object"
             elif my_label in es_special:
                 es_kind = "special"
 
@@ -280,9 +282,10 @@ class ExecutionStructure(object):
         print("E:",e)
         row, _ = e.shape
         if row == 1:
-            meaning = e['meanings'].tolist().pop() + ':' + ekey.split(':')[1] + ':' + ekey.split(':')[2] + ':' + e['dependency'].tolist().pop()
+            meaning = e['meanings'].tolist().pop() + ':' + ekey.split(':')[1] + ':' + ekey.split(':')[2] + ':' \
+                      + e['dependency'].tolist().pop() + ":" + e['d-verb'].tolist().pop()
         elif row == 0:
-            meaning = 'not_found' + ':' + ekey.split(':')[1] + ':' + ekey.split(':')[2] + ':T'
+            meaning = 'not_found' + ':' + ekey.split(':')[1] + ':' + ekey.split(':')[2] + ':T:F'
         else:
             meaning = None
 
@@ -386,14 +389,24 @@ class ExecutionStructure(object):
                                 meanings = values[:]
                                 meanings += tmp[:]
                         else:
+                            tmp = []
+                            dependency = False
                             check_es_dict = copy.deepcopy(es_dict)
+                            for meaning in m_meanings:
+                                if meaning.split(':')[3] == 'T':
+                                    dependency = True
+                                else:
+                                    tmp.append(meaning)
+
                             for value in values:
                                 sub_meaning = self.get_meaning(value)
                                 sub_es_type = value.split(':')[2] 
                                 print("sub_meaning:{}, check_es_dict:{}".format(sub_meaning, check_es_dict))
                                 if sub_meaning and sub_es_type != "action" and check_es_dict[sub_es_type] == []:
-                                    print("+++++++++++sub_meaning:",sub_meaning)
                                     es_dict[sub_es_type].append(sub_meaning)
+                                elif sub_es_type == 'action' and dependency and sub_meaning.split(':')[0] != 'not_found':
+                                    meanings = tmp[:]
+                                    meanings.append(sub_meaning)
 
                         print("meanings:",meanings)
                     elif key.split('_')[1] == 'suff':
@@ -478,16 +491,27 @@ class ExecutionStructure(object):
 
                 es_object = es_dict['object'][0].split(':')[0] if es_dict['object'] else None
 
+                derived_verb = []
                 if len(es_dict['subject']) > 1:
+                    subjects = []
+                    prev_idx = -1
                     for value in map(lambda x: x.split(':'), es_dict['subject']):
-                        subjects = []
                         if value[0] != 'not_found':
                             subjects.append(value[0])
+                        if value[4] == 'T':
+                            idx = int(value[1].split('/')[1])
+                            if idx > prev_idx:
+                                derived_verb = [value[0]]
+                                prev_idx = idx
 
+                    print("subjects:",subjects)
                     if len(subjects) > 1:
-                        es_subject = "something(subjects, self.compound_entities)"
-                    else:
+                        es_subject = "something(subjects, derived_verb, self.compound_entities)"
+                    elif len(subjects) == 1:
                         es_subject = subjects[0]
+                        subjects = None
+                    else:
+                        es_subject = 'not_found'
                         subjects = None
                 elif len(es_dict['subject']) == 1:
                     es_subject = es_dict['subject'][0].split(':')[0] + '()' if es_dict['subject'][0] else 'entity()'
@@ -503,7 +527,8 @@ class ExecutionStructure(object):
             send_params = {
                 'user_convo':user_convo,
                 'subjects':subjects,
-                'action_neg':action_neg
+                'action_neg':action_neg,
+                'derived_verb':derived_verb
             }
             domain, answer, *params = getattr(eval(es_subject), es_action)(es_object, **send_params)
             print("Return values: {0}, {1}, {2}".format(domain, answer, params))

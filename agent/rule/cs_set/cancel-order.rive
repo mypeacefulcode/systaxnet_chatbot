@@ -6,5 +6,5 @@
 + order cancel
 - 주문 취소를 요청 하셨습니다.
 
-+ cancel-order do
++ cancelorder do
 - 주문 취소를 요청 하셨습니다.
