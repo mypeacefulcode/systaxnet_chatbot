@@ -4,6 +4,7 @@
 *.bak
 *.log
 *.out
+agent/export.env
 
 venv/
 logs/

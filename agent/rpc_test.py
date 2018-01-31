@@ -58,7 +58,7 @@ texts = [
     "전화번호 바꿀께",
     "전화번호 바꾸려면 어떻게 해야하나요"
 ]
-#texts = ["환불 하려고 하는데요"]
+texts = ["환불해줘"]
 
 for text in texts:
     body_json = {"user_text":text}

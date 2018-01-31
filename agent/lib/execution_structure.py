@@ -215,7 +215,6 @@ class ExecutionStructure(object):
         self.pt_df = df
         self.pt_df['a_pos'] = pd.Series(index=self.pt_df.index)
         self.pt_df['exec_pos'] = pd.Series(index=self.pt_df.index)
-        self.pt_df.to_csv('parse_tree.csv', index=False)
 
         self.analyze_pos(analyzer)
 
