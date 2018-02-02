@@ -1,3 +1,6 @@
 domain,entities
-cancelorder,"cancel+, order+"
-phonenumber,"phone+, number+"
+cancelOrder,"cancel+, order+"
+phoneNumber,"phone+, number+"
+returns,"request+, returns+"
+manager,"connection+, manager+"
+email,"email+, address+"

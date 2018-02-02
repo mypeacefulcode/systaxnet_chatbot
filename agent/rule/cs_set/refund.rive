@@ -9,5 +9,8 @@
 + refund unknown
 - 환불에 대해 어떤 처리를 원하시나요?
 
-+ refund cancel
++ cancel refund
 - 환불 요청에 대해 취소 신청 하셨습니다.
+
++ (tell|enable) refund
+- 환불 가능한지 문의하셨습니다.

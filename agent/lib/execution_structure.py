@@ -63,7 +63,8 @@ class ExecutionStructure(object):
         es_kind = None
 
         es_action = set(['ROOT-VERB','ROOT-PRT','ROOT-ADJ','ADVCL-VERB','ROOT-ADJECTIVE','AUX-VERB','ROOT-AFFIX','SUFF'])
-        es_subject = set(['ROOT-NOUN','NSUBJ','AUX-NOUN','CCOMP','ADVCL-NOUN','DOBJ','NN'])
+        #es_subject = set(['ROOT-NOUN','NSUBJ','AUX-NOUN','CCOMP','ADVCL-NOUN','DOBJ','NN'])
+        es_subject = set(['ROOT-NOUN','NSUBJ','AUX-NOUN','CCOMP','ADVCL-NOUN','NN'])
         es_modifier = set(['RCMOD','ADVMOD','ATTR'])
         es_object = set(['DOBJ','NN'])
         es_special = set(['NEG', 'NUM'])
@@ -401,7 +402,10 @@ class ExecutionStructure(object):
                                 sub_meaning = self.get_meaning(value)
                                 sub_es_type = value.split(':')[2] 
                                 print("sub_meaning:{}, check_es_dict:{}".format(sub_meaning, check_es_dict))
-                                if sub_meaning and sub_es_type != "action" and check_es_dict[sub_es_type] == []:
+                                if sub_meaning and sub_es_type != "action" and \
+                                   (sub_es_type not in check_es_dict.keys() or check_es_dict[sub_es_type] == []):
+                                    if sub_es_type not in es_dict.keys():
+                                        es_dict[sub_es_type] = []
                                     es_dict[sub_es_type].append(sub_meaning)
                                 elif sub_es_type == 'action' and dependency and sub_meaning.split(':')[0] != 'not_found':
                                     meanings = tmp[:]
@@ -488,8 +492,20 @@ class ExecutionStructure(object):
                     if es_dict['action_neg'][0].split(':')[0] == 'not':
                         action_neg = 'not'
 
-                es_object = es_dict['object'][0].split(':')[0] if es_dict['object'] else None
+                if es_dict['subject'] == [] and es_dict['object'] != []:
+                    es_dict['subject'] = es_dict['object']
+                    es_dict['object'] = []
+                    
+                es_object = []
+                es_tmp = []
+                for value in map(lambda x: x.split(':'), es_dict['object']):
+                    if value[3] == 'T':
+                        es_tmp.append(value[0])
+                    else:
+                        es_object.append(value[0])
+                es_object = es_tmp if es_object == [] else es_object
 
+                #es_object = es_dict['object'][0].split(':')[0] if es_dict['object'] else None
                 derived_verb = []
                 if len(es_dict['subject']) > 1:
                     subjects = []
@@ -505,7 +521,7 @@ class ExecutionStructure(object):
 
                     print("subjects:",subjects)
                     if len(subjects) > 1:
-                        es_subject = "something(subjects, derived_verb, self.compound_entities)"
+                        es_subject = "something()"
                     elif len(subjects) == 1:
                         es_subject = subjects[0]
                         subjects = None
@@ -527,7 +543,8 @@ class ExecutionStructure(object):
                 'user_convo':user_convo,
                 'subjects':subjects,
                 'action_neg':action_neg,
-                'derived_verb':derived_verb
+                'derived_verb':derived_verb,
+                'compound_entities':self.compound_entities
             }
             domain, answer, *params = getattr(eval(es_subject), es_action)(es_object, **send_params)
             print("Return values: {0}, {1}, {2}".format(domain, answer, params))

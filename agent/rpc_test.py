@@ -6,7 +6,9 @@ import uuid, json
 class RpcSample(object):
     def __init__(self):
         credentials = pika.PlainCredentials('guest','wmind2017')
-        self.connection = pika.BlockingConnection(pika.ConnectionParameters(host='35.200.123.60', credentials=credentials))
+        #mq_server = '35.189.129.153' #release
+        mq_server = '35.200.123.60' #development
+        self.connection = pika.BlockingConnection(pika.ConnectionParameters(host=mq_server, credentials=credentials))
 
         self.channel = self.connection.channel()
 
@@ -40,12 +42,10 @@ texts = [
     "환불 할께요",
     "환불하고 싶어요",
     "환불 할께",
-    "환불 하고 싶어",
     "환불해줘",
     "환불",
     "환불하려면 어떻게 해야 하나요",
     "환불하고 싶은데요",
-    "환불 해주세요",
     "환불함",
     "환불한다",
     "주문취소",
@@ -56,9 +56,12 @@ texts = [
     "핸드폰 번호 바꾸고 싶어요",
     "전화번호 바꿔",
     "전화번호 바꿀께",
-    "전화번호 바꾸려면 어떻게 해야하나요"
+    "전화번호 바꾸려면 어떻게 해야하나요",
+    "반품 요청한거 취소할께요"
 ]
-texts = ["환불해줘"]
+#texts = ["전화번호 바꿀께요"]
+#texts = ["이메일주소 바꿀께"]
+texts = ["환불 안해도 돼"]
 
 for text in texts:
     body_json = {"user_text":text}
