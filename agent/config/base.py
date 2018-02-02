@@ -24,6 +24,8 @@ ES_CONFIG = {
         'csv_entities_file':'entities.csv',
         'parse_label_file':'parse_label.csv',
         'domain_exp_file':'domain_expression.csv',
+        'verify_dict_file':'verify_dictionary.csv',
+        'compound_entities_file':'compound_entities.csv',
     },
     # Context 
     # [환불, 주문취소, 배송, 기타]
@@ -67,5 +69,16 @@ ES_CONFIG = {
         'before_delivery' : 'error-before-delivery'
     },
     "special_obj" : ['order','cancel','refund'],
-    "special_act" : ['하다']
+    "special_act" : ['하다'],
+    # S.O.A
+    'soa_info' : {
+        'message' : {
+            'entity' : 'help',
+            'cls_conversation' : 'greeting',
+            'cls_abstraction' : 'help',
+            'cls_cs' : 'help'
+        }
+    }
 }
+
+

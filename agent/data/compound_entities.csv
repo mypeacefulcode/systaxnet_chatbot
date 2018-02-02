@@ -1,0 +1,6 @@
+domain,entities
+cancelOrder,"cancel+, order+"
+phoneNumber,"phone+, number+"
+returns,"request+, returns+"
+manager,"connection+, manager+"
+email,"email+, address+"
