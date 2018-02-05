@@ -11,7 +11,9 @@ word,type,dependency,meanings,d-verb
 바꿀/VERB,action,F,change,F
 바꿀께/Verb,action,F,change,F
 바꿀려구/Verb,action,F,change,F
-바꾸려면/Verb,action,F,change,F
+바꾸려구/Verb,action,F,change,F
+바꾸려면/Verb,action,F,change,T
+불러/VERB,action,F,call,F
 싶다/Verb,action,F,want,F
 싶습니다/ADJ,action,F,want,F
 싶어/ADJ,action,F,want,F

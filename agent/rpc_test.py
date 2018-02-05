@@ -59,9 +59,9 @@ texts = [
     "전화번호 바꾸려면 어떻게 해야하나요",
     "반품 요청한거 취소할께요"
 ]
-#texts = ["전화번호 바꿀께요"]
+#texts = ["전화번호 바꿀께"]
 #texts = ["이메일주소 바꿀께"]
-texts = ["환불 안해도 돼"]
+texts = ["어제 주문한물건 반품할께요"]
 
 for text in texts:
     body_json = {"user_text":text}

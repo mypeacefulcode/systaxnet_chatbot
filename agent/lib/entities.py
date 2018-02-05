@@ -306,6 +306,10 @@ class manager(cls_abstraction):
     def change(cls, *args, **kwargs):
         return cls.change.__name__, cls.__name__, 
 
+    @classmethod
+    def call(cls, *args, **kwargs):
+        return cls.call.__name__, cls.__name__, 
+
 class money(cls_abstraction):
     @classmethod
     def giveme(cls, *args, **kwargs):

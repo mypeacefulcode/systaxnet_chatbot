@@ -9,7 +9,7 @@
 + connection unknown
 - 무엇을 연결해 드릴까요?
 
-+ (connection|please|change) manager
++ (connection|please|change|call) manager
 - 상담원 연결을 요청하셨습니다.
 
 + manager do
