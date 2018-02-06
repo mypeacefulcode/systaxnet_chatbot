@@ -14,10 +14,10 @@ word,type,dependency,meanings,d-verb
 바꾸려구/Verb,action,F,change,F
 바꾸려면/Verb,action,F,change,T
 불러/VERB,action,F,call,F
-싶다/Verb,action,F,want,F
-싶습니다/ADJ,action,F,want,F
-싶어/ADJ,action,F,want,F
-싶은데/ADJ,action,F,want,F
+싶다/Verb,action,T,want,F
+싶습니다/ADJ,action,T,want,F
+싶어/ADJ,action,T,want,F
+싶은데/ADJ,action,T,want,F
 안/ADV,action,F,not,F
 안됬네/Adjective,action,F,not,F
 안오네/ADJ,action,F,late,F

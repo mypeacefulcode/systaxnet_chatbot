@@ -158,6 +158,11 @@ class something(entity):
         cls.__get_compound_entity__(*args, **kwargs)
         return cls.tell.__name__, cls.compound_entity
 
+    @classmethod
+    def want(cls, *args, **kwargs):
+        cls.__get_compound_entity__(*args, **kwargs)
+        return cls.tell.__name__, cls.compound_entity
+
 class cls_conversation(entity):
     @classmethod
     def do(cls, *args, **kwargs):
@@ -321,98 +326,49 @@ class money(cls_abstraction):
         return cls_name, cls_action
         
 
-class cancel(cls_abstraction):
+class cls_derived(entity):
+    use_entities = []
+    verb_entities = ['change']
     @classmethod
     def do(cls, *args, **kwargs):
         if len(args[0]) == 1:
-            if args[0][0] in ['refund', 'order']:
+            if args[0][0] in cls.use_entities:
                 target = args[0][0]
             else:
                 target = 'unknown'
+
+            cls_action = cls.__name__
         else:
-            compound_entity =  cls.get_compound_entity(args[0])
+            cls_entities = [ value for value in args[0] if value not in cls.verb_entities ]
+            cls_actions = [ value for value in args[0] if value in cls.verb_entities ]
+            print("entities:{}, actions:{})".format(cls_entities, cls_actions))
+
+            compound_entity =  cls.get_compound_entity(cls_entities)
             target = compound_entity if compound_entity else 'unknown'
 
-        return cls.__name__, target
+            cls_action = cls_actions[0] if len(cls_actions) > 0 else cls.__name__
+
+        return cls_action, target
 
     @classmethod
     def want(cls, *args, **kwargs):
         cls_name, target = cls.do(*args, **kwargs)
         return cls_name, target
 
-class enable(cls_abstraction):
-    @classmethod
-    def do(cls, *args, **kwargs):
-        if len(args[0]) == 1:
-            if args[0][0] in []:
-                target = args[0][0]
-            else:
-                target = 'unknown'
-        else:
-            compound_entity =  cls.get_compound_entity(args[0])
-            target = compound_entity if compound_entity else 'unknown'
+class cancel(cls_derived):
+    use_entities = ['refund', 'order']
 
-        return cls.__name__, target
+class enable(cls_derived):
+    pass
 
-    @classmethod
-    def want(cls, *args, **kwargs):
-        cls_name, target = cls.do(*args, **kwargs)
-        return cls_name, target
+class exchange(cls_derived):
+    pass
 
+class connection(cls_derived):
+    use_entities = ['manager']
 
-class exchange(cls_abstraction):
-    @classmethod
-    def do(cls, *args, **kwargs):
-        if len(args[0]) == 1:
-            if args[0][0] in []:
-                target = args[0][0]
-            else:
-                target = 'unknown'
-        else:
-            compound_entity =  cls.get_compound_entity(args[0])
-            target = compound_entity if compound_entity else 'unknown'
+class please(cls_derived):
+    use_entities = ['manager']
 
-        return cls.__name__, target
-
-    @classmethod
-    def want(cls, *args, **kwargs):
-        cls_name, target = cls.do(*args, **kwargs)
-        return cls_name, target
-
-class connection(cls_abstraction):
-    @classmethod
-    def do(cls, *args, **kwargs):
-        if len(args[0]) == 1:
-            if args[0][0] in ['manager']:
-                target = args[0][0]
-            else:
-                target = 'unknown'
-        else:
-            compound_entity =  cls.get_compound_entity(args[0])
-            target = compound_entity if compound_entity else 'unknown'
-
-        return cls.__name__, target
-
-    @classmethod
-    def want(cls, *args, **kwargs):
-        cls_name = cls.do(*args, **kwargs)
-        return cls_name, target
-
-class please(cls_abstraction):
-    @classmethod
-    def do(cls, *args, **kwargs):
-        if len(args[0]) == 1:
-            if args[0][0] in ['manager']:
-                target = args[0][0]
-            else:
-                target = 'unknown'
-        else:
-            compound_entity =  cls.get_compound_entity(args[0])
-            target = compound_entity if compound_entity else 'unknown'
-
-        return cls.__name__, target
-
-    @classmethod
-    def want(cls, *args, **kwargs):
-        cls_name = cls.do(*args, **kwargs)
-        return cls_name, target
+class request(cls_derived):
+    use_entities = ['manager']
