@@ -62,7 +62,7 @@ class ExecutionStructure(object):
 
         es_kind = None
 
-        es_action = set(['ROOT-VERB','ROOT-PRT','ROOT-ADJ','ADVCL-VERB','ROOT-ADJECTIVE','AUX-VERB','ROOT-AFFIX','SUFF'])
+        es_action = set(['ROOT-VERB','ROOT-PRT','ROOT-ADJ','ADVCL-VERB','ROOT-ADJECTIVE','AUX-VERB','ROOT-AFFIX','SUFF','PRECOMP'])
         #es_subject = set(['ROOT-NOUN','NSUBJ','AUX-NOUN','CCOMP','ADVCL-NOUN','DOBJ','NN'])
         es_subject = set(['ROOT-NOUN','NSUBJ','AUX-NOUN','CCOMP','ADVCL-NOUN','NN'])
         es_modifier = set(['RCMOD','ADVMOD','ATTR'])
@@ -455,10 +455,11 @@ class ExecutionStructure(object):
             'object':[],
             'action':[]
         }
+        """
         for es_type in ['subject', 'object', 'action']:
             for value in es_dict[es_type]:
                 sub_es_type = value.split(':')[2]
-                if sub_es_type in ['subjectd', 'object', 'action'] and \
+                if sub_es_type in ['subject', 'object', 'action'] and \
                    es_type != sub_es_type and (es_dict[sub_es_type] == [] or es_dict[sub_es_type][0].split(':')[0] == 'not_found'):
                     tmp_es_dict[sub_es_type].append(value)
                 else:
@@ -470,6 +471,9 @@ class ExecutionStructure(object):
             action_neg = ''
 
         es_dict = tmp_es_dict.copy()
+        """
+        if 'action_neg' not in es_dict.keys():
+            action_neg = ''
         print("final es_dict:",es_dict)
 
         try:

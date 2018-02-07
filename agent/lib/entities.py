@@ -6,6 +6,8 @@ from datetime import datetime, timedelta
 from .soa_config import *
 
 class not_found(object):
+    unknown_context = 'unknown'
+
     def __getattr__(cls, name):
         def method(cls, *args, **kwargs):
             print("Unknown mehtod '{0}'".format(name))
@@ -13,6 +15,10 @@ class not_found(object):
             return "help", "do"
 
         return method
+
+    @classmethod
+    def cancel(cls, *args, **kwargs):
+        return cls.cancel.__name__, cls.unknown_context
 
 class entity(object):
     first_context = 'do'
@@ -161,7 +167,12 @@ class something(entity):
     @classmethod
     def want(cls, *args, **kwargs):
         cls.__get_compound_entity__(*args, **kwargs)
-        return cls.tell.__name__, cls.compound_entity
+        return cls.want.__name__, cls.compound_entity
+
+    @classmethod
+    def come(cls, *args, **kwargs):
+        cls.__get_compound_entity__(*args, **kwargs)
+        return cls.come.__name__, cls.compound_entity
 
 class cls_conversation(entity):
     @classmethod
@@ -329,6 +340,7 @@ class money(cls_abstraction):
 class cls_derived(entity):
     use_entities = []
     verb_entities = ['change']
+
     @classmethod
     def do(cls, *args, **kwargs):
         if len(args[0]) == 1:
@@ -358,6 +370,9 @@ class cls_derived(entity):
 class cancel(cls_derived):
     use_entities = ['refund', 'order']
 
+class change(cls_derived):
+    use_entities = ['email', 'address']
+
 class enable(cls_derived):
     pass
 
@@ -372,3 +387,6 @@ class please(cls_derived):
 
 class request(cls_derived):
     use_entities = ['manager']
+
+class want(cls_derived):
+    use_entities = ['manager', 'refund', 'order','returns']

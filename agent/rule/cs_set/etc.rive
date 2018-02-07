@@ -9,11 +9,14 @@
 + connection unknown
 - 무엇을 연결해 드릴까요?
 
-+ (connection|please|change|call|request) manager
++ (connection|please|change|call|request) (manager|customercenter)
 - 상담원 연결을 요청하셨습니다.
 
-+ manager do
++ (customercenter|manager) do
 - 상담원을 연결해 드릴까요?
 
 + change email
 - 이메일 주소를 바꾸시겠습니까?
+
++ change address
+- 주소를 바꾸시겠습니까?

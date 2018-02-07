@@ -140,7 +140,7 @@ def blocking_connection(publisher):
     channel.queue_declare(queue=CHAT_QUEUE, durable=True)
 
     analyzer = QueueClient(rabbitmq_conf, 'morph_queue')
-    syntaxnet = Syntaxnet(logger)
+    syntaxnet = Syntaxnet(logger, publisher.es.entities)
 
     parser = QueueClient(rabbitmq_conf, 'nlp_queue')
 
