@@ -153,12 +153,17 @@ class Syntaxnet(object):
                     prev_idx = idx
                     loop_idx += 1
 
-                if re.match('.+원함$',morphs):
-                    w_list = []
-                    for w in morphs.split('원함'):
-                        w = w if w != '' else '원함'
-                        w_list.append(w)
-                    morphs = ' '.join(w_list)
+                w_list = []
+                for morph in morphs.split(' '):
+                    if re.match('.+원함$',morph):
+                        for w in morph.split('원함'):
+                            w = w if w != '' else '원함'
+                            w_list.append(w)
+                    elif re.match('^안와$',morph):
+                        w_list.append('안 와')
+                    else:
+                        w_list.append(morph)
+                morphs = ' '.join(w_list)
 
                 segment_str += ' ' + morphs
                 word_list = []

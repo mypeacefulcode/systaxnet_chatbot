@@ -6,8 +6,8 @@ import uuid, json
 class RpcSample(object):
     def __init__(self):
         credentials = pika.PlainCredentials('guest','wmind2017')
-        mq_server = '35.189.129.153' #release
-        #mq_server = '35.200.123.60' #development
+        #mq_server = '35.189.129.153' #release
+        mq_server = '35.200.123.60' #development
         self.connection = pika.BlockingConnection(pika.ConnectionParameters(host=mq_server, credentials=credentials))
 
         self.channel = self.connection.channel()
@@ -44,29 +44,33 @@ texts = [
     "환불하려면 어떻게 해야 하나요",
     "환불함",
     "주문취소",
-    "주문취소할께",
+    "주문취소 가능한가요?",
     "주문취소 하고 싶어요",
     "주문취소 합니다",
     "전화번호 바꿀께요",
     "핸드폰 번호 바꾸고 싶어요",
     "전화번호 바꿀께",
     "전화번호 바꾸려면 어떻게 해야하나요",
-    "전화번호 변경 요청할께요"
+    "전화번호 변경 요청할께요",
     "반품 요청한거 취소할께요",
     "메일 주소 바꿀께",
     "고객센터 연결해줘",
     "상담사 바꿔줘",
     "환불 가능하나요"
 ]
-texts = ["메일 주소 바꿀께"]
+#texts = ["뭔 정상 제품이란 말입니까 단추 넣는 구멍에 단추가 안끼이는데!!"]
+#texts = ["반품 요청한거 취소할께요"]
+#texts = ["핸드폰 번호 바꾸고 싶어요"]
+#texts = ["주문취소 하고 싶어요"]
 
 for text in texts:
     body_json = {"user_text":text}
     body_str = json.dumps(body_json)
 
-    print(" [x] Requesting %s" % body_str)
+    print(" [x] Requesting %s" % text)
     response = json.loads(rpc_sample.call(body_str))
     response_str = json.dumps(response, indent=4)
 
     print(" [.] Got\n %s" % response_str)
     print("Text:{}".format(response['bot_text']))
+    print("---------------------------------------")

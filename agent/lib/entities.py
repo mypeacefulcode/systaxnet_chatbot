@@ -114,6 +114,13 @@ class entity(object):
 
         return return_args
 
+    
+    @classmethod
+    def check_value(cls, value):
+        return_value = cls.get_time(value).strftime("%m월 %d일")  if re.match("^[+,-]+[0-9]+[d,h]$",value) else value
+
+        return return_value
+
     @classmethod
     def get_time(cls, time_info):
         value = time_info[:-1]
@@ -173,6 +180,11 @@ class something(entity):
     def come(cls, *args, **kwargs):
         cls.__get_compound_entity__(*args, **kwargs)
         return cls.come.__name__, cls.compound_entity
+
+    @classmethod
+    def give(cls, *args, **kwargs):
+        cls.__get_compound_entity__(*args, **kwargs)
+        return cls.give.__name__, cls.compound_entity
 
 class cls_conversation(entity):
     @classmethod
@@ -288,7 +300,7 @@ class cls_cs(entity):
     @classmethod
     def do(cls, *args, **kwargs):
         if args[0] == 'cancel':
-                cls.action = 'cancel'
+                cls.action = args[0]
         else:
                 cls.action = cls.first_context
 
@@ -305,6 +317,22 @@ class cls_cs(entity):
         cls_name, cls_action = cls.do(*args, **kwargs)
         return cls_name, cls_action
 
+    @classmethod
+    def come(cls, *args, **kwargs):
+        if cls.__name__  in kwargs['special_entities'].keys():
+            add_str = " " + cls.check_value(kwargs['special_entities'][cls.__name__])
+        else:
+            add_str = ""
+        domain_str = cls.__name__ + add_str
+
+        if cls.come.__name__ in kwargs['special_entities'].keys():
+            add_str = " " + cls.check_value(kwargs['special_entities'][cls.come.__name__])
+        else:
+            add_str = ""
+        answer_str = cls.come.__name__ + add_str
+
+        return domain_str, answer_str
+
 class refund(cls_cs):
     pass
 
@@ -315,6 +343,9 @@ class cancelorder(cls_cs):
     pass
 
 class returns(cls_cs):
+    pass
+
+class thing(cls_cs):
     pass
 
 class manager(cls_abstraction):
@@ -367,6 +398,11 @@ class cls_derived(entity):
         cls_name, target = cls.do(*args, **kwargs)
         return cls_name, target
 
+    @classmethod
+    def give(cls, *args, **kwargs):
+        cls_name, target = cls.do(*args, **kwargs)
+        return cls_name, target
+
 class cancel(cls_derived):
     use_entities = ['refund', 'order']
 
@@ -386,7 +422,7 @@ class please(cls_derived):
     use_entities = ['manager']
 
 class request(cls_derived):
-    use_entities = ['manager']
+    use_entities = ['manager','refund']
 
 class want(cls_derived):
     use_entities = ['manager', 'refund', 'order','returns']

@@ -11,3 +11,6 @@
 
 + cancelorder do
 - 주문 취소를 요청 하셨습니다.
+
++ (do|want|enable) cancelorder
+- 주문 취소를 요청 하셨습니다.

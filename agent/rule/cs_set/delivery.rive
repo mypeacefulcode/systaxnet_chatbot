@@ -2,3 +2,18 @@
 
 + delivery begin
 - 배송 확인을 하시겠습니까?
+
++ order * come when
+- <star1> 주문 배송확인 요청 하셨습니다.
+
++ (order|thing) come when
+- 배송확인 요청 하셨습니다.
+
++ (order|thing) come late
+- 배송지연 확인 요청하셨습니다.
+
++ thing come not
+- 배송지연 확인 요청하셨습니다.
+
++ (do|give) checkdelivery
+- 배송 확인을 요청하셨습니다.
