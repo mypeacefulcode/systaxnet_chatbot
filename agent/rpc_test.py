@@ -61,7 +61,9 @@ texts = [
 #texts = ["뭔 정상 제품이란 말입니까 단추 넣는 구멍에 단추가 안끼이는데!!"]
 #texts = ["반품 요청한거 취소할께요"]
 #texts = ["핸드폰 번호 바꾸고 싶어요"]
-#texts = ["주문취소 하고 싶어요"]
+#texts = ["물건 언제 오나요"]
+#texts = ["반품 요청한거 취소할께요"]
+#texts = ["메일 주소 바꿀께"]
 
 for text in texts:
     body_json = {"user_text":text}

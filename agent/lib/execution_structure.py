@@ -85,19 +85,19 @@ class ExecutionStructure(object):
                     print("loop es kind:", key)
         else:
             print("dept else - my_label, parent_label, parent_es_kind:",my_label, parent_label, parent_es_kind)
-            if my_label == "SUFF" and parent_es_kind == 'subject':
+            if my_label == "SUFF" and parent_es_kind[:7] == 'subject':
                 es_kind = "subject_suff"
-            elif my_label == "DEP" and parent_es_kind == 'object':
+            elif my_label == "DEP" and parent_es_kind[:6] == 'object':
                 es_kind = "object"
-            elif my_label == "DEP" and parent_es_kind == 'subject':
+            elif my_label == "DEP" and parent_es_kind[:7] == 'subject':
                 es_kind = "subject"
-            elif my_label == "DEP" and parent_es_kind == 'action':
+            elif my_label == "DEP" and parent_es_kind[:6] == 'action':
                 es_kind = "subject"
-            elif my_label == "NN" and parent_es_kind == "object":
+            elif my_label == "NN" and parent_es_kind[:6] == "object":
                 es_kind = "object"
-            elif my_label == "NN" and parent_es_kind == "subject":
+            elif my_label == "NN" and parent_es_kind[:7] == "subject":
                 es_kind = "subject"
-            elif my_label in ["NN","DOBJ"] and parent_es_kind == "action":
+            elif my_label in ["NN","DOBJ"] and parent_es_kind[:6] == "action":
                 es_kind = "subject"
             elif my_label in ["DOBJ"]:
                 es_kind = "object"
@@ -349,7 +349,7 @@ class ExecutionStructure(object):
         es_dict = {}
         print("1. parse_dict:",parse_dict)
 
-        for es_type in ['subject', 'object', 'action']:
+        for es_type in ['subject', 'object', 'action', 'modifier']:
             try:
                 print("es_dict(sub loop):",es_dict)
                 sub_keys = []
@@ -414,6 +414,8 @@ class ExecutionStructure(object):
                     elif key.split('_')[1] == 'suff':
                         if es_type == 'subject':
                             parse_dict['action'] += parse_dict[key]
+                    elif key == 'modifier':
+                        pass
                     elif key.split('_')[1] == 'neg':
                         if key not in es_dict.keys():
                             es_dict[key] = []
@@ -437,6 +439,7 @@ class ExecutionStructure(object):
             x = pattern.match(verb[1].split('/')[0])
             if type(x.lastindex) == int and x.lastindex < prev_index:
                 derived_verb = verb[0]
+                prev_index = x.lastindex
 
         return [derived_verb]
 

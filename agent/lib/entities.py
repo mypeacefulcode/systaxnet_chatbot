@@ -143,48 +143,56 @@ class entity(object):
 class something(entity):
     @classmethod
     def __get_compound_entity__(cls, *args, **kwargs):
-        cls.entities = [ value for value in kwargs['subjects'] if value not in kwargs['derived_verb']]
-        cls.derived_verb = kwargs['derived_verb']
-        print("entities:{}, derived_verb:{})".format(cls.entities, cls.derived_verb))
+        entities = [ value for value in kwargs['subjects'] if value not in kwargs['derived_verb']]
+        derived_verb = kwargs['derived_verb']
+        print("entities:{}, derived_verb:{})".format(entities, derived_verb))
 
-        if len(cls.entities) == 1:
-            cls.compound_entity = cls.entities[0]
+        if len(entities) == 1:
+            compound_entity = entities[0]
+            action = derived_verb[0] if len(derived_verb) == 1 else 'do'
             check_flag =True 
         else:
-            cls.compound_entity =  cls.get_compound_entity(cls.entities)
-            if not cls.compound_entity:
-                cls.compound_entity = 'Unknown'
+            compound_entity =  cls.get_compound_entity(entities)
+            if not compound_entity:
+                compound_entity = 'Unknown'
+            action = derived_verb[0] if len(derived_verb) == 1 else 'do'
+
+        return compound_entity, action
 
     @classmethod
     def do(cls, *args, **kwargs):
-        cls.__get_compound_entity__(*args, **kwargs)
-        action = cls.derived_verb[0] if cls.derived_verb != [] else cls.first_context
-        return action, cls.compound_entity
+        compound_entity, action = cls.__get_compound_entity__(*args, **kwargs)
+        return action, compound_entity
 
     @classmethod
     def change(cls, *args, **kwargs):
-        cls.__get_compound_entity__(*args, **kwargs)
-        return cls.change.__name__, cls.compound_entity
+        compound_entity, action = cls.__get_compound_entity__(*args, **kwargs)
+        action = cls.change.__name__ if action == 'do' else action
+        return action, compound_entity
 
     @classmethod
     def tell(cls, *args, **kwargs):
-        cls.__get_compound_entity__(*args, **kwargs)
-        return cls.tell.__name__, cls.compound_entity
+        compound_entity, action = cls.__get_compound_entity__(*args, **kwargs)
+        action = cls.tell.__name__ if action == 'do' else action
+        return action, compound_entity
 
     @classmethod
     def want(cls, *args, **kwargs):
-        cls.__get_compound_entity__(*args, **kwargs)
-        return cls.want.__name__, cls.compound_entity
+        compound_entity, action = cls.__get_compound_entity__(*args, **kwargs)
+        action = cls.want.__name__ if action == 'do' else action
+        return action, compound_entity
 
     @classmethod
     def come(cls, *args, **kwargs):
-        cls.__get_compound_entity__(*args, **kwargs)
-        return cls.come.__name__, cls.compound_entity
+        compound_entity, action = cls.__get_compound_entity__(*args, **kwargs)
+        action = cls.come.__name__ if action == 'do' else action
+        return action, compound_entity
 
     @classmethod
     def give(cls, *args, **kwargs):
-        cls.__get_compound_entity__(*args, **kwargs)
-        return cls.give.__name__, cls.compound_entity
+        compound_entity, action = cls.__get_compound_entity__(*args, **kwargs)
+        action = cls.give.__name__ if action == 'do' else action
+        return action, compound_entity
 
 class cls_conversation(entity):
     @classmethod
