@@ -5,12 +5,11 @@ import traceback
 from datetime import datetime, timedelta
 from .soa_config import *
 
-class entity(object):
-    first_context = 'do'
-    entity_dict = None
+class not_found(object):
+    unknown_context = 'unknown'
 
-    def __getattr__(self, name):
-        def method(self, *args, **kwarg):
+    def __getattr__(cls, name):
+        def method(cls, *args, **kwargs):
             print("Unknown mehtod '{0}'".format(name))
 
             return "help", "do"
@@ -18,8 +17,56 @@ class entity(object):
         return method
 
     @classmethod
-    def do(cls, *args, **kwarg):
-        return soa_info.message[cls.__name__], cls.first_context
+    def cancel(cls, *args, **kwargs):
+        return cls.cancel.__name__, cls.unknown_context
+
+class entity(object):
+    first_context = 'do'
+    unknown_context = 'unknown'
+    entity_dict = None
+
+    @classmethod
+    def __init__(cls, *args, **kwargs):
+        cls.compound_df = soa_info.compound_entities
+
+    @classmethod
+    def __getattr__(cls, name):
+        def method(cls, *args, **kwargs):
+            print("Unknown mehtod '{0}'".format(name))
+
+            return "help", "do"
+
+        return method
+
+    @classmethod
+    def get_compound_entity(cls, entities):
+        pattern = '^(?=.*' + ')(?=.*'.join(entities) + ').*$'
+        df = cls.compound_df[cls.compound_df.entities.str.contains(pattern)]
+        row, _ = df.shape
+
+        check_flag = False
+        if row > 0 :
+            for index, row in df.iterrows():
+                items = row['entities'].split(',')
+                for item in items:
+                    item = item.strip()
+                    if re.match('.*\+',item) and (item[:-1] not in entities):
+                        check_flag = True
+
+                compound_entity = row['domain']
+
+        if check_flag:
+            compound_entity = None
+
+        return compound_entity
+
+    @classmethod
+    def do(cls, *args, **kwargs):
+        return cls.__name__, cls.first_context
+
+    @classmethod
+    def not_found(cls, *args, **kwargs):
+        return cls.__name__, cls.unknown_context
 
     @classmethod
     def input_validation(cls, check_list, entities):
@@ -67,6 +114,13 @@ class entity(object):
 
         return return_args
 
+    
+    @classmethod
+    def check_value(cls, value):
+        return_value = cls.get_time(value).strftime("%m월 %d일")  if re.match("^[+,-]+[0-9]+[d,h]$",value) else value
+
+        return return_value
+
     @classmethod
     def get_time(cls, time_info):
         value = time_info[:-1]
@@ -86,10 +140,64 @@ class entity(object):
 
         return es_subject, es_action, es_object
 
+class something(entity):
+    @classmethod
+    def __get_compound_entity__(cls, *args, **kwargs):
+        entities = [ value for value in kwargs['subjects'] if value not in kwargs['derived_verb']]
+        derived_verb = kwargs['derived_verb']
+        print("entities:{}, derived_verb:{})".format(entities, derived_verb))
+
+        if len(entities) == 1:
+            compound_entity = entities[0]
+            action = derived_verb[0] if len(derived_verb) == 1 else 'do'
+            check_flag =True 
+        else:
+            compound_entity =  cls.get_compound_entity(entities)
+            if not compound_entity:
+                compound_entity = 'Unknown'
+            action = derived_verb[0] if len(derived_verb) == 1 else 'do'
+
+        return compound_entity, action
+
+    @classmethod
+    def do(cls, *args, **kwargs):
+        compound_entity, action = cls.__get_compound_entity__(*args, **kwargs)
+        return action, compound_entity
+
+    @classmethod
+    def change(cls, *args, **kwargs):
+        compound_entity, action = cls.__get_compound_entity__(*args, **kwargs)
+        action = cls.change.__name__ if action == 'do' else action
+        return action, compound_entity
+
+    @classmethod
+    def tell(cls, *args, **kwargs):
+        compound_entity, action = cls.__get_compound_entity__(*args, **kwargs)
+        action = cls.tell.__name__ if action == 'do' else action
+        return action, compound_entity
+
+    @classmethod
+    def want(cls, *args, **kwargs):
+        compound_entity, action = cls.__get_compound_entity__(*args, **kwargs)
+        action = cls.want.__name__ if action == 'do' else action
+        return action, compound_entity
+
+    @classmethod
+    def come(cls, *args, **kwargs):
+        compound_entity, action = cls.__get_compound_entity__(*args, **kwargs)
+        action = cls.come.__name__ if action == 'do' else action
+        return action, compound_entity
+
+    @classmethod
+    def give(cls, *args, **kwargs):
+        compound_entity, action = cls.__get_compound_entity__(*args, **kwargs)
+        action = cls.give.__name__ if action == 'do' else action
+        return action, compound_entity
+
 class cls_conversation(entity):
     @classmethod
-    def do(cls, *args, **kwarg):
-        return soa_info.message[cls.__name__.split('_')[1]], cls.first_context
+    def do(cls, *args, **kwargs):
+        return cls.__name__, cls.first_context
 
     @classmethod
     def accept_another_subject(cls, subject, self_subject):
@@ -102,57 +210,57 @@ class cls_conversation(entity):
 
 class cls_abstraction(entity):
     @classmethod
-    def do(cls, *args, **kwarg):
-        return soa_info.message[cls.__name__.split('_')[1]], cls.first_context
+    def do(cls, *args, **kwargs):
+        return cls.__name__, cls.first_context
 
 class cls_weather(entity):
     @classmethod
-    def do(cls, *args, **kwarg):
+    def do(cls, *args, **kwargs):
         return cls.__name__, cls.first_context
 
 class cls_area(entity):
     @classmethod
-    def do(cls, *args, **kwarg):
-        user_convo = kwarg['user_convo']
-        area = kwarg['subject']
+    def do(cls, *args, **kwargs):
+        user_convo = kwargs['user_convo']
+        area = kwargs['subject']
         user_convo['args']['area'] =  area
         es_subject, es_action, es_object = cls.get_sao_info(user_convo)
 
-        domain, answer, *params = getattr(eval(es_subject), es_action)(es_object, user_convo=user_convo, subject=kwarg['subject'])
+        domain, answer, *params = getattr(eval(es_subject), es_action)(es_object, user_convo=user_convo, subject=kwargs['subject'])
         return domain, answer, params[0]
 
 class cls_action(entity):
     @classmethod
-    def do(cls, *args, **kwarg):
-        user_convo = kwarg['user_convo']
-        area = kwarg['subject']
+    def do(cls, *args, **kwargs):
+        user_convo = kwargs['user_convo']
+        area = kwargs['subject']
         user_convo['args']['area'] =  area
         es_subject, es_action, es_object = cls.get_sao_info(user_convo)
 
-        domain, answer, *params = getattr(eval(es_subject), es_action)(es_object, user_convo=user_convo, subject=kwarg['subject'])
+        domain, answer, *params = getattr(eval(es_subject), es_action)(es_object, user_convo=user_convo, subject=kwargs['subject'])
         return domain, answer, params[0]
 
 class greeting(cls_conversation):
     @classmethod
-    def do(cls, *args, **kwarg):
-        if cls.accept_another_subject(kwarg['subject'], cls.__name__):
+    def do(cls, *args, **kwargs):
+        if cls.accept_another_subject(kwargs['subject'], cls.__name__):
             return cls.__name__, cls.first_context
         else:
             return "help", cls.first_context
 
     @classmethod
-    def longtime(cls, *args, **kwarg):
+    def longtime(cls, *args, **kwargs):
         return cls.__name__, inspect.getframeinfo(inspect.currentframe()).function
 
 class weather(cls_weather):
     required_entity = ['day','area+']
     
     @classmethod
-    def how(cls, *args, **kwarg):
+    def how(cls, *args, **kwargs):
         print("args:",args)
-        print("kwarg:",kwarg)
+        print("kwargs:",kwargs)
 
-        convo_args = cls.set_arg(args, kwarg['user_convo'])
+        convo_args = cls.set_arg(args, kwargs['user_convo'])
         empty_entities = cls.input_validation(cls.required_entity, convo_args)
 
         print("empty_entities:",empty_entities)
@@ -173,26 +281,156 @@ class weather(cls_weather):
             weather_date = cls.get_time('0d')
 
         message = args[0]['area'] + '의 ' + weather_date.strftime('%m월 %d일') + ' 날씨는 xxxx입니다.'
-
         return message
 
     @classmethod
-    def do(cls, *args, **kwarg):
-        domain, message, convo_args = cls.how(*args, **kwarg)
+    def do(cls, *args, **kwargs):
+        domain, message, convo_args = cls.how(*args, **kwargs)
         return domain, message, convo_args
 
     @classmethod
-    def tell(cls, *args, **kwarg):
-        domain, message, convo_args = cls.how(*args, **kwarg)
+    def tell(cls, *args, **kwargs):
+        domain, message, convo_args = cls.how(*args, **kwargs)
         return domain, message, convo_args
 
 class time(entity):
     @classmethod
-    def do(cls, *args, **kwarg):
-        user_convo = kwarg['user_convo']
-        time_info = kwarg['subject']
+    def do(cls, *args, **kwargs):
+        user_convo = kwargs['user_convo']
+        time_info = kwargs['subject']
         user_convo['args']['time'] = time_info
         es_subject, es_action, es_object = cls.get_sao_info(user_convo)
 
-        domain, answer, *params = getattr(eval(es_subject), es_action)(es_object, user_convo=user_convo, subject=kwarg['subject'])
+        domain, answer, *params = getattr(eval(es_subject), es_action)(es_object, user_convo=user_convo, subject=kwargs['subject'])
         return domain, answer, params[0]
+
+class cls_cs(entity):
+    @classmethod
+    def do(cls, *args, **kwargs):
+        if args[0] == 'cancel':
+                cls.action = args[0]
+        else:
+                cls.action = cls.first_context
+
+        action_not = ' not' if kwargs['action_neg'] == 'not' else ''
+        return cls.__name__, cls.action + action_not
+
+    @classmethod
+    def want(cls, *args, **kwargs):
+        cls_name, cls_action = cls.do(*args, **kwargs)
+        return cls_name, cls_action
+
+    @classmethod
+    def give(cls, *args, **kwargs):
+        cls_name, cls_action = cls.do(*args, **kwargs)
+        return cls_name, cls_action
+
+    @classmethod
+    def come(cls, *args, **kwargs):
+        if cls.__name__  in kwargs['special_entities'].keys():
+            add_str = " " + cls.check_value(kwargs['special_entities'][cls.__name__])
+        else:
+            add_str = ""
+        domain_str = cls.__name__ + add_str
+
+        if cls.come.__name__ in kwargs['special_entities'].keys():
+            add_str = " " + cls.check_value(kwargs['special_entities'][cls.come.__name__])
+        else:
+            add_str = ""
+        answer_str = cls.come.__name__ + add_str
+
+        return domain_str, answer_str
+
+class refund(cls_cs):
+    pass
+
+class order(cls_cs):
+    pass
+
+class cancelorder(cls_cs):
+    pass
+
+class returns(cls_cs):
+    pass
+
+class thing(cls_cs):
+    pass
+
+class manager(cls_abstraction):
+    @classmethod
+    def change(cls, *args, **kwargs):
+        return cls.change.__name__, cls.__name__, 
+
+    @classmethod
+    def call(cls, *args, **kwargs):
+        return cls.call.__name__, cls.__name__, 
+
+class money(cls_abstraction):
+    @classmethod
+    def giveme(cls, *args, **kwargs):
+        return cls.__name__, cls.giveme.__name__
+
+    @classmethod
+    def turn(cls, *args, **kwargs):
+        cls_name, cls_action = cls.giveme(*args, **kwargs)
+        return cls_name, cls_action
+        
+
+class cls_derived(entity):
+    use_entities = []
+    verb_entities = ['change']
+
+    @classmethod
+    def do(cls, *args, **kwargs):
+        if len(args[0]) == 1:
+            if args[0][0] in cls.use_entities:
+                target = args[0][0]
+            else:
+                target = 'unknown'
+
+            cls_action = cls.__name__
+        else:
+            cls_entities = [ value for value in args[0] if value not in cls.verb_entities ]
+            cls_actions = [ value for value in args[0] if value in cls.verb_entities ]
+            print("entities:{}, actions:{})".format(cls_entities, cls_actions))
+
+            compound_entity =  cls.get_compound_entity(cls_entities)
+            target = compound_entity if compound_entity else 'unknown'
+
+            cls_action = cls_actions[0] if len(cls_actions) > 0 else cls.__name__
+
+        return cls_action, target
+
+    @classmethod
+    def want(cls, *args, **kwargs):
+        cls_name, target = cls.do(*args, **kwargs)
+        return cls_name, target
+
+    @classmethod
+    def give(cls, *args, **kwargs):
+        cls_name, target = cls.do(*args, **kwargs)
+        return cls_name, target
+
+class cancel(cls_derived):
+    use_entities = ['refund', 'order']
+
+class change(cls_derived):
+    use_entities = ['email', 'address']
+
+class enable(cls_derived):
+    pass
+
+class exchange(cls_derived):
+    pass
+
+class connection(cls_derived):
+    use_entities = ['manager']
+
+class please(cls_derived):
+    use_entities = ['manager']
+
+class request(cls_derived):
+    use_entities = ['manager','refund']
+
+class want(cls_derived):
+    use_entities = ['manager', 'refund', 'order','returns']

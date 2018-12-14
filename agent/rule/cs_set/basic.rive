@@ -1,0 +1,13 @@
+! version = 0.1
+
++ processing already
+- 이전 요청을 처리중입니다.
+
++ help do
+- 무슨 말인지 모르겠어요
+
++ cancel unknown
+- 무엇을 취소 하시겠습니까?
+
++ *
+- 무슨 말인지 모르겠어요

@@ -1,0 +1,16 @@
+! version = 0.1
+
++ returns (do|request)
+- 반품 요청을 하셨습니다.
+
++ (want) returns
+- 반품 요청을 하셨습니다.
+
++ returns do not
+- 반품 요청 안하시나요?
+
++ returns unknown
+- 반품에 대해 어떤 처리를 원하시나요?
+
++ cancel returns
+- 반품 요청에 대해 취소 신청 하셨습니다.

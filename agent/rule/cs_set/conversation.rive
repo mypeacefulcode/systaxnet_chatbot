@@ -1,0 +1,12 @@
+! version = 0.1
+
++ greeting do
+- 안녕하세요~
+
++ greeting longtime
+- 안녕하세요~ 우리 오랜만이던가요? ^^
+
++ money giveme
+- 돈을 드릴수 있으면 좋겠네요..{weight=30}
+- 돈이 없어요..{weight=30}
+- 상담원을 연결해 드릴까요?{weight=40}

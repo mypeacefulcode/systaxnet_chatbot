@@ -3,9 +3,10 @@
 import sys, traceback
 import pandas as pd
 import googleapiclient.discovery
+import itertools, time, re
 
 class Syntaxnet(object):
-    def __init__(self, logger):
+    def __init__(self, logger, entities):
         """Returns the encoding type that matches Python's native strings."""
         if sys.maxunicode == 65535:
             self.encoding = 'UTF16'
@@ -14,6 +15,7 @@ class Syntaxnet(object):
 
         self.service = googleapiclient.discovery.build('language', 'v1')
         self.logger = logger
+        self.entities = entities
 
     def analyze_syntax(self, text):
         body = {
@@ -43,21 +45,30 @@ class Syntaxnet(object):
         return result
 
     def verify_parse_tree(self, df):
-        bug_tokens = [("UNKNOWN","할께")]
+        bug_tokens = [("UNKNOWN","할께"),("NUM","하나")]
 
         for pos, text in bug_tokens:
             t_df = df[(df['pos'] == pos) & (df['text'] == text)]
-            if t_df.size > 0:
+            if t_df.size > 0 and text == "할께":
                 token_idx = t_df['token_idx'].tolist().pop()
                 bug_df = df[(df['head_token_idx'] == token_idx) & (df['token_idx'] != token_idx)]
                 child_idxs = bug_df['token_idx'].tolist()
-                print("child-idxs:",child_idxs)
 
                 for child_idx in child_idxs:
                     child_df = df[df['token_idx'] == child_idx]
                     if child_df['label'].tolist().pop() == 'NN':
                         df.label[df.token_idx == child_idx] = 'DOBJ'
+            elif t_df.size > 0 and text == "하나":
+                token_idx = t_df['token_idx'].tolist().pop()
+                child_idx = token_idx - 1
+                lemma = df[df['token_idx'] == child_idx ]['text'].tolist().pop()
+                pos = df[df['token_idx'] == child_idx]['pos'].tolist().pop()
+                e_key = lemma + '/' + pos
 
+                e = self.entities[self.entities['word'] == e_key]
+                row, _ = e.shape
+                if row == 1 and e['d-verb'].tolist().pop() == 'T':
+                    df.pos[df.token_idx == token_idx] = 'VERB'
         return df
 
     def token_to_dataframe(self, response):
@@ -98,3 +109,79 @@ class Syntaxnet(object):
         df = self.verify_parse_tree(df)
 
         return df
+
+    def verify_segmentation(self, response, sentence, verify_dict):
+        prev_word = segment_str = ''
+        prev_offset = 0
+        word_list = []
+        loop_cnt = 0
+        last_loop = False
+        for token in response['tokens']:
+            loop_cnt += 1
+            pos = token['partOfSpeech']['tag']
+            word = token['text']['content']
+            offset = token['text']['beginOffset']
+
+            if loop_cnt == len(response['tokens']):
+                word_list.append(word)
+                last_loop = True
+
+            if prev_offset + len(prev_word) != offset or last_loop:
+                x = start_i = 0
+                word_idxs = [i for i in range(len(word_list))]
+                for r in [3,2]:
+                    for i in range(start_i, len(word_list) - r + 1):
+                        idx = i + x
+                        s_word = ''.join(word_list[idx:idx+r])
+
+                        df = verify_dict.loc[verify_dict['word'] == s_word]
+                        row, _ = df.shape
+
+                        if row == 1:
+                            for sub_i in range(idx,idx+r):
+                                word_idxs[sub_i] = idx
+
+                            x = idx + r
+                            start_i = x
+
+                morphs = ''
+                prev_idx = loop_idx = 0
+                for idx in word_idxs:
+                    if prev_idx != idx:
+                        morphs += ' '
+                    morphs += str(word_list[loop_idx])
+                    prev_idx = idx
+                    loop_idx += 1
+
+                w_list = []
+                for morph in morphs.split(' '):
+                    if re.match('.+원함$',morph):
+                        for w in morph.split('원함'):
+                            w = w if w != '' else '원함'
+                            w_list.append(w)
+                    elif re.match('^안와$',morph):
+                        w_list.append('안 와')
+                    else:
+                        w_list.append(morph)
+                morphs = ' '.join(w_list)
+
+                segment_str += ' ' + morphs
+                word_list = []
+
+            word_list.append(word)
+            prev_offset = offset + len(word)
+
+        return segment_str
+
+    def save_respons(self, mongodb, response, corpus, service_type):
+        doc = {
+            'corpus' : corpus,
+            'created_date' : time.time(),
+            'service' : service_type,
+            'type' : 'L',
+            'parse_tree' : response
+        }
+        try:
+            mongodb.corpusdb.service_log.insert(doc)
+        except:
+            self.logger(traceback.print_exc())
