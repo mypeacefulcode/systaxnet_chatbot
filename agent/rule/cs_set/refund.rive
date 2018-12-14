@@ -1,6 +1,6 @@
 ! version = 0.1
 
-+ refund do
++ refund (do|want)
 - 환불 요청을 하셨습니다.
 
 + refund do not

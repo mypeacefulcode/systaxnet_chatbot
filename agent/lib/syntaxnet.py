@@ -3,10 +3,10 @@
 import sys, traceback
 import pandas as pd
 import googleapiclient.discovery
-import itertools, time
+import itertools, time, re
 
 class Syntaxnet(object):
-    def __init__(self, logger):
+    def __init__(self, logger, entities):
         """Returns the encoding type that matches Python's native strings."""
         if sys.maxunicode == 65535:
             self.encoding = 'UTF16'
@@ -15,6 +15,7 @@ class Syntaxnet(object):
 
         self.service = googleapiclient.discovery.build('language', 'v1')
         self.logger = logger
+        self.entities = entities
 
     def analyze_syntax(self, text):
         body = {
@@ -44,21 +45,30 @@ class Syntaxnet(object):
         return result
 
     def verify_parse_tree(self, df):
-        bug_tokens = [("UNKNOWN","할께")]
+        bug_tokens = [("UNKNOWN","할께"),("NUM","하나")]
 
         for pos, text in bug_tokens:
             t_df = df[(df['pos'] == pos) & (df['text'] == text)]
-            if t_df.size > 0:
+            if t_df.size > 0 and text == "할께":
                 token_idx = t_df['token_idx'].tolist().pop()
                 bug_df = df[(df['head_token_idx'] == token_idx) & (df['token_idx'] != token_idx)]
                 child_idxs = bug_df['token_idx'].tolist()
-                print("child-idxs:",child_idxs)
 
                 for child_idx in child_idxs:
                     child_df = df[df['token_idx'] == child_idx]
                     if child_df['label'].tolist().pop() == 'NN':
                         df.label[df.token_idx == child_idx] = 'DOBJ'
+            elif t_df.size > 0 and text == "하나":
+                token_idx = t_df['token_idx'].tolist().pop()
+                child_idx = token_idx - 1
+                lemma = df[df['token_idx'] == child_idx ]['text'].tolist().pop()
+                pos = df[df['token_idx'] == child_idx]['pos'].tolist().pop()
+                e_key = lemma + '/' + pos
 
+                e = self.entities[self.entities['word'] == e_key]
+                row, _ = e.shape
+                if row == 1 and e['d-verb'].tolist().pop() == 'T':
+                    df.pos[df.token_idx == token_idx] = 'VERB'
         return df
 
     def token_to_dataframe(self, response):
@@ -142,6 +152,18 @@ class Syntaxnet(object):
                     morphs += str(word_list[loop_idx])
                     prev_idx = idx
                     loop_idx += 1
+
+                w_list = []
+                for morph in morphs.split(' '):
+                    if re.match('.+원함$',morph):
+                        for w in morph.split('원함'):
+                            w = w if w != '' else '원함'
+                            w_list.append(w)
+                    elif re.match('^안와$',morph):
+                        w_list.append('안 와')
+                    else:
+                        w_list.append(morph)
+                morphs = ' '.join(w_list)
 
                 segment_str += ' ' + morphs
                 word_list = []

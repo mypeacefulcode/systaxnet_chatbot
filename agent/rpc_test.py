@@ -41,35 +41,38 @@ rpc_sample = RpcSample()
 texts = [
     "환불 할께요",
     "환불하고 싶어요",
-    "환불 할께",
-    "환불해줘",
-    "환불",
     "환불하려면 어떻게 해야 하나요",
-    "환불하고 싶은데요",
     "환불함",
-    "환불한다",
     "주문취소",
-    "주문취소할께",
+    "주문취소 가능한가요?",
     "주문취소 하고 싶어요",
     "주문취소 합니다",
     "전화번호 바꿀께요",
     "핸드폰 번호 바꾸고 싶어요",
-    "전화번호 바꿔",
     "전화번호 바꿀께",
     "전화번호 바꾸려면 어떻게 해야하나요",
-    "반품 요청한거 취소할께요"
+    "전화번호 변경 요청할께요",
+    "반품 요청한거 취소할께요",
+    "메일 주소 바꿀께",
+    "고객센터 연결해줘",
+    "상담사 바꿔줘",
+    "환불 가능하나요",
+    "물건 언제 오나요?"
 ]
-#texts = ["전화번호 바꿀께요"]
-#texts = ["이메일주소 바꿀께"]
-texts = ["환불 안해도 돼"]
+#texts = ["반품 요청한거 취소할께요"]
+#texts = ["핸드폰 번호 바꾸고 싶어요"]
+#texts = ["물건 언제 오나요"]
+#texts = ["반품 요청한거 취소할께요"]
+texts = ["물건 안와요?"]
 
 for text in texts:
     body_json = {"user_text":text}
     body_str = json.dumps(body_json)
 
-    print(" [x] Requesting %s" % body_str)
+    print(" [x] Requesting %s" % text)
     response = json.loads(rpc_sample.call(body_str))
     response_str = json.dumps(response, indent=4)
 
     print(" [.] Got\n %s" % response_str)
     print("Text:{}".format(response['bot_text']))
+    print("---------------------------------------")
