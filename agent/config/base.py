@@ -8,10 +8,10 @@ SYSTEM_ERROR_MESSAGE = "챗봇 시스템에 장애가 발생했습니다. 관리
 # ['chatbot']
 CHATBOT_USER = ['MJCcwuRtcaDs9Mfe8']
 RC_CONF = {
-    'url':'http://35.189.156.233:3000',
+    'url':'http://.....',
     'path':'/api/v1',
     'username':'chatbot',
-    'password':'wmind2017'
+    'password':'.....'
 }
 
 # Message

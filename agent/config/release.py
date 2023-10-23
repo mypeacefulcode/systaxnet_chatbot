@@ -1,20 +1,20 @@
-zk_server_1 = "10.146.0.6"
-zk_server_2 = "10.146.0.4"
-zk_server_3 = "10.146.0.2"
+zk_server_1 = "...."
+zk_server_2 = "...."
+zk_server_3 = "...."
 
 mongodb_conf = {
-    "hosts":"10.146.0.8",
+    "hosts":"....",
     "port":27017
 }
 
 rabbitmq_conf = {
-    "hosts":"10.146.0.3",
+    "hosts":"....",
     "port":5672,
     "user":"guest",
-    "password":"wmind2017"
+    "password":"...."
 }
 
 redis_conf = {
-    "hosts":"10.146.0.8",
+    "hosts":"....",
     "port":6379
 }
